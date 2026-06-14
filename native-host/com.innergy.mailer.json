@@ -1,0 +1,9 @@
+{
+  "name": "com.innergy.mailer",
+  "description": "Innergy PO -> Mail native messaging host",
+  "path": "REPLACED_BY_INSTALL_SH",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://akplcachdkpchhcacbbbnkgbfnfgifbn/"
+  ]
+}
