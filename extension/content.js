@@ -381,7 +381,15 @@
       return b;
     };
     const cancelBtn = mkBtn("Cancel", false);
-    const okBtn = mkBtn("Attach selected & Draft", true);
+    const okBtn = mkBtn("Draft Email", true);
+
+    // Button reads "Draft Email" until files are checked, then reflects the count.
+    const updateOkLabel = () => {
+      const n = checkboxes.filter((c) => c.cb.checked).length;
+      okBtn.textContent = n === 0 ? "Draft Email" : `Attach ${n} & Draft`;
+    };
+    checkboxes.forEach((c) => c.cb.addEventListener("change", updateOkLabel));
+    updateOkLabel();
 
     const close = () => overlay.remove();
     cancelBtn.addEventListener("click", () => {

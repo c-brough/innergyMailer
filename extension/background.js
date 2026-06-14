@@ -235,9 +235,13 @@ function downloadAndWait(url, name) {
 
 async function sendToHost(attachments, pending) {
   const stored = await chrome.storage.local.get(["mailApp", "azureClientId"]);
-  const mailApp = stored.mailApp || "mail";
+  // Match options.js: when nothing is saved yet, the default is OS-appropriate
+  // (Windows → Outlook Classic, otherwise Apple Mail). Without this the label
+  // wrongly read "Apple Mail" on Windows.
+  const isWindows = navigator.userAgent.includes("Windows");
+  const mailApp = stored.mailApp || (isWindows ? "outlook_classic" : "mail");
   const appLabel =
-    mailApp === "outlook"         ? "Outlook" :
+    mailApp === "outlook"         ? "Microsoft Outlook (Mac)" :
     mailApp === "outlook_classic" ? "Outlook Classic" :
     mailApp === "outlook_new"     ? "New Outlook" :
                                     "Apple Mail";
