@@ -7,16 +7,52 @@
       body {
         font: 14px -apple-system, system-ui, sans-serif;
         color: #1a1a1a;
-        max-width: 460px;
+        max-width: 480px;
         margin: 32px auto;
         padding: 0 20px;
       }
       h1 { font-size: 18px; margin-bottom: 4px; }
       p.sub { color: #666; margin-top: 0; }
-      fieldset { border: 1px solid #ddd; border-radius: 8px; padding: 12px 16px; }
+      fieldset { border: 1px solid #ddd; border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; }
       legend { font-weight: 600; padding: 0 6px; }
       label.opt { display: flex; align-items: center; gap: 10px; padding: 8px 0; cursor: pointer; }
-      label.opt input { width: 16px; height: 16px; }
+      label.opt input[type="radio"] { width: 16px; height: 16px; }
+      label.opt.disabled { opacity: 0.38; cursor: not-allowed; }
+      label.opt.disabled input { pointer-events: none; }
+
+      .help-btn {
+        margin-left: 6px; padding: 0 6px; height: 18px; line-height: 16px;
+        font-size: 11px; font-weight: 700; color: #555;
+        background: #eee; border: 1px solid #ccc; border-radius: 50%;
+        cursor: pointer; vertical-align: middle;
+      }
+      .help-btn:hover { background: #dde4ff; border-color: #8899ee; color: #1a56db; }
+
+      #graph-help {
+        display: none; margin-top: 10px; padding: 12px 14px;
+        background: #fffbe6; border: 1px solid #e8d98a; border-radius: 8px;
+        font-size: 13px; line-height: 1.55; color: #333;
+      }
+      #graph-help ol { margin: 8px 0 0 18px; padding: 0; }
+      #graph-help li { margin-bottom: 6px; }
+      #graph-help code { background: #f0f0f0; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+      #graph-help a { color: #1a56db; }
+
+      #graph-setup { display: none; margin-top: 8px; padding: 12px 14px; background: #f5f7ff; border: 1px solid #c7d0f8; border-radius: 8px; }
+      #graph-setup p { margin: 0 0 8px; font-size: 13px; color: #444; }
+      #graph-setup a { color: #1a56db; }
+      #client-id-row { display: flex; gap: 8px; align-items: center; }
+      #client-id { flex: 1; font: 13px monospace; padding: 5px 8px; border: 1px solid #ccc; border-radius: 6px; }
+      #auth-btn {
+        padding: 5px 12px; background: #1a56db; color: #fff;
+        border: none; border-radius: 6px; cursor: pointer; font-size: 13px; white-space: nowrap;
+      }
+      #auth-btn:disabled { opacity: 0.5; cursor: default; }
+      #auth-status { font-size: 12px; margin-top: 6px; min-height: 16px; }
+      #auth-status.ok  { color: #2e7d32; }
+      #auth-status.err { color: #c62828; }
+      #auth-status.inf { color: #555; }
+
       #status { margin-top: 14px; height: 18px; color: #2e7d32; font-weight: 600; }
     </style>
   </head>
@@ -24,16 +60,55 @@
     <h1>Innergy PO → Mail</h1>
     <p class="sub">Choose which app should open the drafted email.</p>
 
-    <fieldset>
-      <legend>Mail app</legend>
-      <label class="opt">
+    <fieldset id="fs-mac">
+      <legend>macOS</legend>
+      <label class="opt" id="opt-mail">
         <input type="radio" name="mailApp" value="mail" />
         Apple Mail
       </label>
-      <label class="opt">
+      <label class="opt" id="opt-outlook-mac">
         <input type="radio" name="mailApp" value="outlook" />
-        Microsoft Outlook
+        Microsoft Outlook (Mac)
       </label>
+    </fieldset>
+
+    <fieldset id="fs-win">
+      <legend>Windows</legend>
+      <label class="opt" id="opt-outlook-classic">
+        <input type="radio" name="mailApp" value="outlook_classic" />
+        Outlook Classic (Win)
+      </label>
+      <label class="opt" id="opt-outlook-new">
+        <input type="radio" name="mailApp" value="outlook_new" />
+        New Outlook (Win)
+        <button type="button" class="help-btn" id="graph-help-btn" title="Azure setup instructions">?</button>
+      </label>
+
+      <div id="graph-help">
+        <strong>Azure App Registration — one-time setup</strong>
+        <ol>
+          <li>Go to <a href="https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank">portal.azure.com</a> → <strong>App registrations</strong> → <strong>New registration</strong>.<br>
+            Name: anything (e.g. <code>Innergy Mailer</code>)<br>
+            Supported account types: <strong>Accounts in any organizational directory and personal Microsoft accounts</strong><br>
+            Redirect URI: leave blank → click <strong>Register</strong>
+          </li>
+          <li>Copy the <strong>Application (client) ID</strong> from the overview page.</li>
+          <li>Under <strong>API permissions</strong> → <strong>Add a permission</strong> → <strong>Microsoft Graph</strong> → <strong>Delegated</strong> → add <code>Mail.ReadWrite</code>.</li>
+          <li>Paste the Client ID below and click <strong>Sign in</strong>. A browser tab opens — sign in with your Microsoft account. The token is cached so you only do this once.</li>
+        </ol>
+      </div>
+
+      <div id="graph-setup">
+        <p>New Outlook requires a one-time Microsoft sign-in via the Graph API.
+          <a href="https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank">Register a free Azure app</a>
+          and paste the <strong>Application (client) ID</strong> below.
+        </p>
+        <div id="client-id-row">
+          <input id="client-id" type="text" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" spellcheck="false" />
+          <button id="auth-btn">Sign in</button>
+        </div>
+        <div id="auth-status" class="inf"></div>
+      </div>
     </fieldset>
 
     <div id="status"></div>

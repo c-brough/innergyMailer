@@ -7,6 +7,21 @@ native-host/run-host.sh
 # Runtime log written by the native host
 native-host/host.log
 
+# Windows batch wrapper (machine-specific)
+native-host/run-host.bat
+
+# Compiled Windows native host binary
+native-host/innergy_mailer_host_win.exe
+
+# PyInstaller build artifacts
+native-host/build/
+native-host/dist/
+native-host/innergy_mailer_host_win.spec
+
+# OAuth token cache -- contains credentials, never commit
+native-host/graph_token_cache.json
+native-host/auth_pending.json
+
 # Python / macOS / editor noise
 __pycache__/
 *.pyc

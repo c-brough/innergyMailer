@@ -74,8 +74,51 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         console.error("[InnergyMailer] Failed to arm:", e);
         sendResponse({ armed: false });
       });
-    return true; // keep the message channel open for the async response
+    return true;
   }
+
+  if (msg && msg.type === "GRAPH_AUTH") {
+    chrome.storage.local.get("azureClientId", (data) => {
+      const clientId = msg.clientId || data.azureClientId;
+      if (!clientId) {
+        sendResponse({ ok: false, error: "No client ID configured." });
+        return;
+      }
+      // Step 1: start the device flow — returns the user code immediately.
+      dbg("auth_start sending");
+      chrome.runtime.sendNativeMessage(NATIVE_HOST, { action: "auth_start", clientId }, (r1) => {
+        if (chrome.runtime.lastError) {
+          sendResponse({ ok: false, error: chrome.runtime.lastError.message });
+          return;
+        }
+        dbg("auth_start response", r1);
+        if (!r1 || !r1.ok) {
+          sendResponse(r1 || { ok: false, error: "No response from host." });
+          return;
+        }
+        if (r1.alreadySignedIn) {
+          sendResponse(r1);
+          return;
+        }
+        // Stash the user code in storage so options.js can display it via onChanged.
+        chrome.storage.local.set({ graphAuthCode: r1.userCode, graphAuthUri: r1.verificationUri });
+
+        // Step 2: wait for sign-in to complete (blocks in native host until done).
+        dbg("auth_complete sending");
+        chrome.runtime.sendNativeMessage(NATIVE_HOST, { action: "auth_complete" }, (r2) => {
+          chrome.storage.local.remove(["graphAuthCode", "graphAuthUri"]);
+          if (chrome.runtime.lastError) {
+            sendResponse({ ok: false, error: chrome.runtime.lastError.message });
+            return;
+          }
+          dbg("auth_complete response", r2);
+          sendResponse(r2 || { ok: false, error: "No response from host." });
+        });
+      });
+    });
+    return true;
+  }
+
   return false;
 });
 
@@ -191,15 +234,21 @@ function downloadAndWait(url, name) {
 }
 
 async function sendToHost(attachments, pending) {
-  const { mailApp = "mail" } = await chrome.storage.local.get("mailApp");
-  const appLabel = mailApp === "outlook" ? "Outlook" : "Apple Mail";
+  const stored = await chrome.storage.local.get(["mailApp", "azureClientId"]);
+  const mailApp = stored.mailApp || "mail";
+  const appLabel =
+    mailApp === "outlook"         ? "Outlook" :
+    mailApp === "outlook_classic" ? "Outlook Classic" :
+    mailApp === "outlook_new"     ? "New Outlook" :
+                                    "Apple Mail";
   const payload = {
     attachments,
-    pdfPath: attachments[0], // backward-compatible single-file field
+    pdfPath: attachments[0],
     subject: pending.subject,
     body: pending.body,
     to: pending.to,
     app: mailApp,
+    clientId: stored.azureClientId || "",
   };
   dbg("calling sendNativeMessage", { host: NATIVE_HOST, app: mailApp, attachments });
   chrome.runtime.sendNativeMessage(NATIVE_HOST, payload, (response) => {
@@ -213,7 +262,8 @@ async function sendToHost(attachments, pending) {
       dbg("mail draft created", attachments);
       const extra = attachments.length - 1;
       const suffix = extra > 0 ? ` (+${extra} PO file${extra === 1 ? "" : "s"})` : "";
-      report(pending.tabId, true, `${appLabel} draft created${suffix}.`);
+      const msg = response.message || `${appLabel} draft created${suffix}.`;
+      report(pending.tabId, true, msg);
     } else {
       const err = (response && response.error) || "Unknown error.";
       dbg("host reported failure", err);
