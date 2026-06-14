@@ -32,12 +32,48 @@ foreach ($candidate in @("python", "python3", "py")) {
 }
 
 if (-not $pythonExe) {
-    Write-Error @"
-Python 3 not found on PATH.
-Install Python 3 from https://www.python.org/downloads/ (check 'Add to PATH')
-then re-run this script.
-"@
-    exit 1
+    Write-Host "Python 3 not found. Downloading and installing Python 3.13..." -ForegroundColor Yellow
+
+    $pyInstaller = "$env:TEMP\python_installer.exe"
+    $pyUrl = "https://www.python.org/ftp/python/3.13.0/python-3.13.0-amd64.exe"
+
+    Write-Host "Downloading from $pyUrl ..."
+    try {
+        Invoke-WebRequest -Uri $pyUrl -OutFile $pyInstaller -UseBasicParsing
+    } catch {
+        Write-Error "Download failed: $_`nInstall Python 3 manually from https://www.python.org/downloads/"
+        exit 1
+    }
+
+    Write-Host "Running Python installer (this may take a minute)..."
+    # /quiet = silent, InstallAllUsers=0 = per-user, PrependPath=1 = add to PATH
+    $proc = Start-Process -FilePath $pyInstaller -ArgumentList "/quiet InstallAllUsers=0 PrependPath=1 Include_test=0" -Wait -PassThru
+    Remove-Item $pyInstaller -ErrorAction SilentlyContinue
+
+    if ($proc.ExitCode -ne 0) {
+        Write-Error "Python installer exited with code $($proc.ExitCode). Install manually from https://www.python.org/downloads/"
+        exit 1
+    }
+
+    # Refresh PATH so the new python is visible in this session.
+    $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" +
+                [System.Environment]::GetEnvironmentVariable("PATH", "User")
+
+    foreach ($candidate in @("python", "python3", "py")) {
+        try {
+            $path = (Get-Command $candidate -ErrorAction SilentlyContinue).Source
+            if (-not $path) { continue }
+            $ver = & $path --version 2>&1
+            if ($ver -match "Python 3") { $pythonExe = $path; break }
+        } catch {}
+    }
+
+    if (-not $pythonExe) {
+        Write-Error "Python installed but still not found on PATH. Close and reopen PowerShell, then re-run this script."
+        exit 1
+    }
+
+    Write-Host "Python installed: $pythonExe" -ForegroundColor Green
 }
 Write-Host "Found Python: $pythonExe" -ForegroundColor Green
 
