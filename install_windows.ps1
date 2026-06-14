@@ -1,5 +1,5 @@
 # install_windows.ps1
-# Registers the Innergy PO -> Mail native messaging host for Chrome/Edge on Windows.
+# Registers the Innergy Mailer native messaging host for Chrome/Edge on Windows.
 # Run from PowerShell: .\install_windows.ps1
 # (Right-click > "Run with PowerShell" also works)
 
@@ -14,7 +14,7 @@ if (-not $isAdmin) {
 }
 
 Write-Host ""
-Write-Host "=== Innergy PO -> Mail: Windows Installer ===" -ForegroundColor Cyan
+Write-Host "=== Innergy Mailer: Windows Installer ===" -ForegroundColor Cyan
 Write-Host ""
 
 # --- Locate Python 3 ---
@@ -135,7 +135,7 @@ Write-Host "Compiled: $exePath" -ForegroundColor Green
 import json, sys
 manifest = {
     'name': 'com.innergy.mailer',
-    'description': 'Innergy PO -> Mail native messaging host',
+    'description': 'Innergy Mailer native messaging host',
     'path': sys.argv[1],
     'type': 'stdio',
     'allowed_origins': ['chrome-extension://akplcachdkpchhcacbbbnkgbfnfgifbn/']

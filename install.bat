@@ -1,9 +1,9 @@
 @echo off
-:: Innergy PO -> Mail -- Windows native host installer
+:: Innergy Mailer -- Windows native host installer
 :: Double-click this file to install. No PowerShell knowledge needed.
 
 echo.
-echo  Innergy PO -^> Mail Installer
+echo  Innergy Mailer Installer
 echo  ==============================
 echo.
 

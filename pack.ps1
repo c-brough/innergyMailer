@@ -16,7 +16,7 @@ param([switch]$StoreOnly)
 $ErrorActionPreference = "Stop"
 
 Write-Host ""
-Write-Host "=== Innergy PO -> Mail: Pack Extension ===" -ForegroundColor Cyan
+Write-Host "=== Innergy Mailer: Pack Extension ===" -ForegroundColor Cyan
 Write-Host ""
 
 $scriptDir    = Split-Path -Parent $MyInvocation.MyCommand.Path

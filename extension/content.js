@@ -1,4 +1,4 @@
-/* Innergy PO → Mail — content script
+/* Innergy Mailer — content script
  *
  * Injects a "Draft Email w/ PDF" button immediately to the LEFT of the
  * existing "Export Custom PDF" button on an Innergy purchase-order page.

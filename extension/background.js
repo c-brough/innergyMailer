@@ -1,4 +1,4 @@
-/* Innergy PO → Mail — background service worker
+/* Innergy Mailer — background service worker
  *
  * Watches for the PDF that the content script triggers via "Export Custom PDF",
  * then forwards its on-disk path plus the email subject/body/recipient to the
