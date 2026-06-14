@@ -18,6 +18,9 @@ native-host/build/
 native-host/dist/
 native-host/innergy_mailer_host_win.spec
 
+# Packed extension output
+dist/
+
 # OAuth token cache -- contains credentials, never commit
 native-host/graph_token_cache.json
 native-host/auth_pending.json
