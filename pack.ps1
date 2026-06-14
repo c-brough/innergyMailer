@@ -120,23 +120,49 @@ if (Test-Path $pemTemp) {
 }
 
 # ---------------------------------------------------------------------------
+# 3. Windows native host installer ZIP (for GitHub Releases)
+#    Contains everything a Windows user needs to install the native host.
+# ---------------------------------------------------------------------------
+Write-Host "Building Windows installer ZIP..." -ForegroundColor Yellow
+
+$winZipOut  = Join-Path $distDir "innergy-mailer-windows-installer.zip"
+$tempWinDir = Join-Path $env:TEMP "innergy_win_installer"
+if (Test-Path $tempWinDir) { Remove-Item $tempWinDir -Recurse -Force }
+New-Item -ItemType Directory -Force -Path $tempWinDir | Out-Null
+
+# Copy everything the installer needs.
+Copy-Item (Join-Path $scriptDir "install.bat")          $tempWinDir
+Copy-Item (Join-Path $scriptDir "install_windows.ps1")  $tempWinDir
+Copy-Item (Join-Path $scriptDir "native-host\innergy_mailer_host_win.py") $tempWinDir
+
+if (Test-Path $winZipOut) { Remove-Item $winZipOut -Force }
+[System.IO.Compression.ZipFile]::CreateFromDirectory($tempWinDir, $winZipOut)
+Remove-Item $tempWinDir -Recurse -Force
+
+Write-Host "  Windows installer ZIP: $winZipOut" -ForegroundColor Green
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 Write-Host ""
 Write-Host "=== Done ===" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "Chrome Web Store (Option A):"
-Write-Host "  1. Go to https://chrome.google.com/webstore/devconsole"
-Write-Host "  2. New item -> upload $zipOut"
-Write-Host "  3. Set visibility to 'Unlisted' for private distribution"
-Write-Host "  4. Share the install link with your users"
+Write-Host "Files created in dist/:"
+Write-Host "  innergy-mailer.zip                  -> Chrome Web Store upload"
+Write-Host "  innergy-mailer-windows-installer.zip -> attach to GitHub Release"
+if (Test-Path $crxOut) {
+Write-Host "  innergy-mailer.crx                  -> enterprise self-hosted install"
+}
 Write-Host ""
-Write-Host "Enterprise / self-hosted (Option B):"
-Write-Host "  1. Host $crxOut on a web server or file share"
-Write-Host "  2. Add these registry keys on each machine (or via GPO):"
-Write-Host "     HKLM\SOFTWARE\Policies\Google\Chrome\ExtensionInstallAllowlist\1"
-Write-Host "       = akplcachdkpchhcacbbbnkgbfnfgifbn"
-Write-Host "     HKLM\SOFTWARE\Policies\Google\Chrome\ExtensionInstallSources\1"
-Write-Host "       = <URL to folder containing the .crx>"
-Write-Host "  3. Users visit the .crx URL and Chrome installs it without Developer Mode"
+Write-Host "Deployment steps:"
+Write-Host "  1. Upload innergy-mailer.zip to https://chrome.google.com/webstore/devconsole"
+Write-Host "     Set visibility to Unlisted. Copy the install URL."
+Write-Host ""
+Write-Host "  2. Create a GitHub Release (git tag v1.0.0, push, then create release)"
+Write-Host "     Attach innergy-mailer-windows-installer.zip as a release asset."
+Write-Host ""
+Write-Host "  3. Send customers two links:"
+Write-Host "     - Chrome Web Store install URL"
+Write-Host "     - GitHub Release download URL for the Windows installer ZIP"
+Write-Host "     They unzip the installer, double-click install.bat, done."
 Write-Host ""
