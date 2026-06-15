@@ -11,6 +11,12 @@ next to **Export Custom PDF** on an Innergy purchase-order page. Clicking it:
 
 The draft is left **open and unsent** so you can review and send it yourself.
 
+## Privacy
+
+See the [Privacy Policy](https://c-brough.github.io/innergyEmailer/) — no data is
+sent to the developer; the extension only talks to your own Innergy account and
+your chosen mail app.
+
 ## Why a native helper is needed
 
 Chrome extensions are sandboxed and cannot attach files to Mail. The extension

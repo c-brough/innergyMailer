@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Innergy Mailer — Privacy Policy</title>
+  <style>
+    body { font: 16px/1.6 -apple-system, system-ui, sans-serif; color: #1a1a1a;
+           max-width: 760px; margin: 40px auto; padding: 0 20px; }
+    h1 { font-size: 26px; } h2 { font-size: 19px; margin-top: 28px; }
+    code { background: #f0f0f0; padding: 1px 5px; border-radius: 3px; font-size: 14px; }
+    .muted { color: #666; }
+  </style>
+</head>
+<body>
+  <h1>Innergy Mailer — Privacy Policy</h1>
+  <p class="muted">Last updated: June 14, 2026</p>
+
+  <p>Innergy Mailer is a browser extension that adds a button to Innergy
+  purchase-order pages. It exports the purchase-order PDF using Innergy's
+  existing export, then opens a pre-filled email draft — with the PDF and any
+  selected purchase-order file attachments — in the mail application you choose
+  (Apple Mail or Microsoft Outlook).</p>
+
+  <h2>What the extension accesses</h2>
+  <ul>
+    <li>Information shown on the Innergy purchase-order page you are viewing:
+      the PO number, vendor name, vendor contact email, and material line items.</li>
+    <li>The list of files attached to the purchase order, retrieved from
+      Innergy's own API (<code>app.innergy.com</code>), and the files you choose
+      to include.</li>
+    <li>Your saved preferences: which mail app to use and, on Windows with New
+      Outlook, an optional Microsoft Azure application (client) ID.</li>
+  </ul>
+
+  <h2>How that information is used</h2>
+  <p>The data above is used for one purpose only: to assemble an email draft and
+  open it in your chosen mail application. The exported PDF and any selected
+  attachments are downloaded to your computer and attached to that draft.</p>
+
+  <h2>Where data goes</h2>
+  <ul>
+    <li><strong>It is not sent to the developer.</strong> Innergy Mailer has no
+      backend server and does not collect, store, sell, or share your data with
+      the developer or any third-party analytics or advertising service.</li>
+    <li><strong>Innergy:</strong> the extension communicates only with your own
+      Innergy account at <code>app.innergy.com</code> to read the purchase order
+      you are viewing and its attachments.</li>
+    <li><strong>Your mail app:</strong> the draft details (subject, body,
+      recipient, attachment file paths) are passed to a companion native helper
+      you install, which creates the draft locally in Apple Mail or Outlook.</li>
+    <li><strong>Microsoft (New Outlook on Windows only):</strong> if you choose
+      "New Outlook," the helper signs in with your own Microsoft account and uses
+      the Microsoft Graph API to create the draft in your own mailbox. The email
+      content is transmitted to Microsoft as part of creating that draft in your
+      account. The sign-in token is cached locally on your computer.</li>
+  </ul>
+
+  <h2>Data storage</h2>
+  <p>Preferences are stored locally in your browser via the extension storage
+  API. Any Microsoft sign-in token (New Outlook) is cached locally by the native
+  helper on your computer. None of this is transmitted to the developer.</p>
+
+  <h2>Permissions</h2>
+  <ul>
+    <li><code>downloads</code> — detect the exported PDF and download selected
+      PO attachments to your computer.</li>
+    <li><code>nativeMessaging</code> — pass the draft to the local helper that
+      creates it in your desktop mail app.</li>
+    <li><code>storage</code> — save your preferences and short-lived state.</li>
+    <li>Access to <code>app.innergy.com</code> — run on Innergy pages and read
+      the purchase order and its attachment list.</li>
+  </ul>
+
+  <h2>Contact</h2>
+  <p>Questions about this policy: <a href="mailto:chris@ciderpresswoodworks.com">chris@ciderpresswoodworks.com</a></p>
+</body>
+</html>
