@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Innergy PO → Mail",
+  "name": "Innergy Mailer",
   "version": "1.0.0",
-  "description": "Adds a button beside \"Export Custom PDF\" on Innergy PO pages that exports the PDF and drafts a Mac Mail email with it attached.",
+  "description": "Adds a button beside \"Export Custom PDF\" on Innergy pages that exports the PDF and drafts an email with it attached.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4YGKQs0ZIZu5hJKB3huAHA1LQTXrz2x6q22QI3qL61mJX2epHS0GK81J//7Opan7ezdedGeY2YP+/Jd2kYj2m9XroWv47mdK6xUICh6UysdPRBTS6Y9HoaLesenpgDo0SUbuHqbim/91WYFP4WTjtOvbs1Qq9i0YE86cR8cER3PWFyARTvOxDP1fm80c1egUe5e2M/Eoq/MvgspIFv/UsMxydJLOFt1KK7JFU5Dcq0dD3Eq7Z01O9IWSY9AcuXDPPW6d+0UuVb9UKFWUY4BUiCu+cY2Nwb7nY389SxLG/kUXXXHa0leoHmJlyU0jHWgVRPKZInhym4bg3uaMTwDlkQIDAQAB",
   "permissions": ["downloads", "nativeMessaging", "storage"],
   "host_permissions": ["https://app.innergy.com/*"],

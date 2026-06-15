@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Innergy PO -> Mail native messaging host.
+"""Innergy Mailer native messaging host.
 
 Reads one message from Chrome over stdin using the native-messaging framing
 (4-byte little-endian length prefix + UTF-8 JSON), then drafts an email in the

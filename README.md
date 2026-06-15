@@ -1,4 +1,4 @@
-# Innergy PO → Mail
+# Innergy Mailer
 
 A Chrome extension + native helper that adds a **”Draft Email w/ PDF”** button
 next to **Export Custom PDF** on an Innergy purchase-order page. Clicking it:
