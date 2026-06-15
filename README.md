@@ -37,7 +37,8 @@ native-host/
   run-host.bat                    Windows wrapper (created by install_windows.ps1)
   com.innergy.mailer.json         Native-messaging manifest (written by installer)
 install.sh                        macOS installer
-install_windows.ps1               Windows installer
+install.bat                       Windows installer — double-click; auto-elevates and runs the .ps1
+install_windows.ps1               Windows installer (PowerShell; invoked by install.bat)
 ```
 
 ## Install — Windows
@@ -46,14 +47,16 @@ install_windows.ps1               Windows installer
 Outlook uses the Microsoft Graph API (msal + requests) — no desktop Outlook install
 required for the New Outlook path.
 
-1. Open PowerShell **as Administrator** (right-click → Run as administrator) and run:
-   ```powershell
-   cd path\to\innergyEmailer
-   .\install_windows.ps1
-   ```
-   This installs Python dependencies (`pywin32`, `msal`, `requests`), compiles the
-   host to an `.exe`, writes the JSON manifest, and registers it in `HKLM`
-   (required for system-wide Chrome installs in `Program Files`).
+1. **Double-click `install.bat`** in the project folder. Windows will ask for
+   Administrator access (a UAC prompt) — click **Yes**. The installer then sets
+   everything up: installs Python dependencies (`pywin32`, `msal`, `requests`),
+   compiles the host to an `.exe`, writes the JSON manifest, and registers it in
+   `HKLM` (required for system-wide Chrome installs in `Program Files`). When it
+   finishes, press a key to close the window.
+
+   > Prefer PowerShell? You can run the underlying script directly instead: open
+   > PowerShell **as Administrator** and run `.\install_windows.ps1` from the
+   > project folder. (`install.bat` just elevates and calls this for you.)
 
 2. Load the extension in Chrome:
    - `chrome://extensions` → **Developer mode** on → **Load unpacked** →
