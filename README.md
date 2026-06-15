@@ -13,7 +13,7 @@ The draft is left **open and unsent** so you can review and send it yourself.
 
 ## Privacy
 
-See the [Privacy Policy](https://c-brough.github.io/innergyEmailer/) — no data is
+See the [Privacy Policy](https://c-brough.github.io/innergyMailer/) — no data is
 sent to the developer; the extension only talks to your own Innergy account and
 your chosen mail app.
 
