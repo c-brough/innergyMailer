@@ -12,8 +12,15 @@ EXTENSION_ID="akplcachdkpchhcacbbbnkgbfnfgifbn"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NATIVE_DIR="$SCRIPT_DIR/native-host"
-HOST_PY="$NATIVE_DIR/innergy_mailer_host.py"
-WRAPPER="$NATIVE_DIR/run-host.sh"
+
+# The host must live OUTSIDE ~/Documents (and ~/Desktop, ~/Downloads): those are
+# TCC-protected folders, and macOS blocks a GUI app like Chrome from *executing*
+# a native-messaging host located inside them — the host "exits" before it can
+# run and no draft is created. Install into ~/Library/Application Support, which
+# Chrome can launch from without any special permission.
+INSTALL_DIR="$HOME/Library/Application Support/InnergyMailer"
+HOST_PY="$INSTALL_DIR/innergy_mailer_host.py"
+WRAPPER="$INSTALL_DIR/run-host.sh"
 
 # 1. Resolve an absolute python3 (Chrome launches the host with a minimal PATH,
 #    so we cannot rely on `env python3` finding it).
@@ -25,12 +32,16 @@ fi
 PYTHON_BIN="$(cd "$(dirname "$PYTHON_BIN")" && pwd)/$(basename "$PYTHON_BIN")"
 echo "Using python3: $PYTHON_BIN"
 
-# 2. Create a wrapper that invokes the host with that absolute interpreter.
+# 2. Copy the host into the install dir and create a wrapper that invokes it with
+#    that absolute interpreter.
+mkdir -p "$INSTALL_DIR"
+cp "$NATIVE_DIR/innergy_mailer_host.py" "$HOST_PY"
 cat > "$WRAPPER" <<EOF
 #!/bin/bash
 exec "$PYTHON_BIN" "$HOST_PY"
 EOF
 chmod +x "$WRAPPER" "$HOST_PY"
+echo "Installed host -> $INSTALL_DIR"
 
 # 3. Write the native-messaging manifest into every Chromium-family browser that
 #    is installed on this Mac.
