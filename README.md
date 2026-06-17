@@ -33,7 +33,6 @@ extension/                        Chrome extension (load unpacked)
 native-host/
   innergy_mailer_host.py          macOS host — drafts via AppleScript (osascript)
   innergy_mailer_host_win.py      Windows host — drafts via Outlook COM (pywin32)
-  run-host.sh                     macOS wrapper (created by install.sh)
   run-host.bat                    Windows wrapper (created by install_windows.ps1)
   com.innergy.mailer.json         Native-messaging manifest (written by installer)
 install.sh                        macOS installer
@@ -104,6 +103,13 @@ PDF (plus any PO file attachments).
 ./install.sh
 ```
 
+This copies the native host to `~/Library/Application Support/InnergyMailer/`
+and registers it with every installed Chromium-family browser. The host is
+installed there — **not** inside the repo — because `~/Documents`, `~/Desktop`,
+and `~/Downloads` are macOS TCC-protected folders that Chrome is not allowed to
+*launch* a native-messaging host from; doing so makes the host silently "exit"
+and no draft is created.
+
 By default the draft opens in **Apple Mail**. To use **Microsoft Outlook**,
 open the extension’s options (right-click icon → **Options**) and select it.
 Outlook must support AppleScript (classic Outlook does).
@@ -158,6 +164,16 @@ Outlook must support AppleScript (classic Outlook does).
   - Windows: confirm `pywin32` is installed (`pip show pywin32`) and classic
     Outlook is present.
   - macOS: confirm Mail.app or Outlook has at least one account configured.
+- **macOS: "Native host has exited" / nothing opens, PDF just downloads** — the
+  host is being blocked by macOS privacy (TCC) protection. Two things to check:
+  1. The host must be installed under `~/Library/Application Support/InnergyMailer/`,
+     not inside `~/Documents`. Re-run `./install.sh` (it installs there now).
+  2. The host reads the exported PDF from `~/Downloads`. Grant your browser
+     **Full Disk Access** (System Settings → Privacy & Security → Full Disk
+     Access → add your browser), then **fully quit and reopen** the browser.
+  Also make sure PDFs are set to **download** (not open in-browser) at
+  `chrome://settings/content/pdfDocuments`, and on first run allow the
+  "wants to control Microsoft Outlook" automation prompt.
 - **Wrong materials columns** — the scraper reads the Materials grid by column
   position (Name=1, Description=2, UoM=3, Qty Ordered=4, Extended Cost=7). If you
   reorder columns in Innergy’s saved view, update the `COL` map in `content.js`.
