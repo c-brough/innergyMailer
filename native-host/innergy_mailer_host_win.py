@@ -373,7 +373,7 @@ def _graph_auth_start(client_id):
 
     open_url = flow.get("verification_uri_complete") or flow.get("verification_uri")
     log(f"auth_start: user_code={flow['user_code']} url={open_url}")
-    webbrowser.open(open_url)
+    _open_in_chrome(open_url)
 
     return {
         "ok": True,
