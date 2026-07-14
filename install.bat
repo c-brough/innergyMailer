@@ -1,9 +1,9 @@
 @echo off
-:: Innergy Mailer -- Windows native host installer
+:: InnerCider -- Windows native host installer
 :: Double-click this file to install. No PowerShell knowledge needed.
 
 echo.
-echo  Innergy Mailer Installer
+echo  InnerCider Installer
 echo  ==============================
 echo.
 

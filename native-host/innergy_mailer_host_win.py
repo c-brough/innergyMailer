@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Innergy Mailer native messaging host (Windows).
+"""InnerCider native messaging host (Windows).
 
 Reads one message from Chrome over stdin (4-byte little-endian length prefix +
 UTF-8 JSON), drafts an email in Microsoft Outlook via COM automation, and

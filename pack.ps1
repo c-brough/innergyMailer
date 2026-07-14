@@ -1,8 +1,8 @@
 # pack.ps1
 # Builds two distributable artefacts from the extension/ folder:
 #
-#   dist/innergy-mailer.zip   -- upload this to the Chrome Web Store
-#   dist/innergy-mailer.crx   -- use this for enterprise / self-hosted installs
+#   dist/innercider.zip   -- upload this to the Chrome Web Store
+#   dist/innercider.crx   -- use this for enterprise / self-hosted installs
 #
 # The .crx is signed with native-host/extension_key.pem (created on first run;
 # keep this file safe -- losing it means you can no longer update the .crx).
@@ -16,15 +16,15 @@ param([switch]$StoreOnly)
 $ErrorActionPreference = "Stop"
 
 Write-Host ""
-Write-Host "=== Innergy Mailer: Pack Extension ===" -ForegroundColor Cyan
+Write-Host "=== InnerCider: Pack Extension ===" -ForegroundColor Cyan
 Write-Host ""
 
 $scriptDir    = Split-Path -Parent $MyInvocation.MyCommand.Path
 $extDir       = Join-Path $scriptDir "extension"
 $distDir      = Join-Path $scriptDir "dist"
 $keyPath      = Join-Path $scriptDir "native-host\extension_key.pem"
-$zipOut       = Join-Path $distDir "innergy-mailer.zip"
-$crxOut       = Join-Path $distDir "innergy-mailer.crx"
+$zipOut       = Join-Path $distDir "innercider.zip"
+$crxOut       = Join-Path $distDir "innercider.crx"
 $manifestPath = Join-Path $extDir "manifest.json"
 
 if (-not (Test-Path $extDir)) {
@@ -125,7 +125,7 @@ if (Test-Path $pemTemp) {
 # ---------------------------------------------------------------------------
 Write-Host "Building Windows installer ZIP..." -ForegroundColor Yellow
 
-$winZipOut  = Join-Path $distDir "innergy-mailer-windows-installer.zip"
+$winZipOut  = Join-Path $distDir "innercider-windows-installer.zip"
 $tempWinDir = Join-Path $env:TEMP "innergy_win_installer"
 if (Test-Path $tempWinDir) { Remove-Item $tempWinDir -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $tempWinDir | Out-Null
@@ -148,18 +148,18 @@ Write-Host ""
 Write-Host "=== Done ===" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Files created in dist/:"
-Write-Host "  innergy-mailer.zip                  -> Chrome Web Store upload"
-Write-Host "  innergy-mailer-windows-installer.zip -> attach to GitHub Release"
+Write-Host "  innercider.zip                  -> Chrome Web Store upload"
+Write-Host "  innercider-windows-installer.zip -> attach to GitHub Release"
 if (Test-Path $crxOut) {
-Write-Host "  innergy-mailer.crx                  -> enterprise self-hosted install"
+Write-Host "  innercider.crx                  -> enterprise self-hosted install"
 }
 Write-Host ""
 Write-Host "Deployment steps:"
-Write-Host "  1. Upload innergy-mailer.zip to https://chrome.google.com/webstore/devconsole"
+Write-Host "  1. Upload innercider.zip to https://chrome.google.com/webstore/devconsole"
 Write-Host "     Set visibility to Unlisted. Copy the install URL."
 Write-Host ""
 Write-Host "  2. Create a GitHub Release (git tag v1.0.0, push, then create release)"
-Write-Host "     Attach innergy-mailer-windows-installer.zip as a release asset."
+Write-Host "     Attach innercider-windows-installer.zip as a release asset."
 Write-Host ""
 Write-Host "  3. Send customers two links:"
 Write-Host "     - Chrome Web Store install URL"

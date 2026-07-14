@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Installs the Innergy PO -> Mail native messaging host so the Chrome extension
+# Installs the InnerCider native messaging host so the Chrome extension
 # can hand off the exported PDF to Mail.app. Safe to re-run.
 #
 # Usage:  ./install.sh
@@ -18,7 +18,7 @@ NATIVE_DIR="$SCRIPT_DIR/native-host"
 # a native-messaging host located inside them — the host "exits" before it can
 # run and no draft is created. Install into ~/Library/Application Support, which
 # Chrome can launch from without any special permission.
-INSTALL_DIR="$HOME/Library/Application Support/InnergyMailer"
+INSTALL_DIR="$HOME/Library/Application Support/InnerCider"
 HOST_PY="$INSTALL_DIR/innergy_mailer_host.py"
 WRAPPER="$INSTALL_DIR/run-host.sh"
 
