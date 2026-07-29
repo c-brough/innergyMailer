@@ -1,7 +1,17 @@
-# Innergy Mailer
+# InnerCider
 
-A Chrome extension + native helper that adds a **”Draft Email w/ PDF”** button
-next to **Export Custom PDF** on an Innergy purchase-order page. Clicking it:
+A Chrome extension (+ native helper) with two tools for Innergy:
+
+1. **Draft PO email** — a **”Draft Email w/ PDF”** button next to **Export Custom
+   PDF** on a purchase-order page (details below).
+2. **Materials total cost** — on the Materials grid, shows the total cost per
+   **Default UoM** / **Purchasing UoM** next to each value (unit `Cost` × the
+   size’s conversion to the base unit, e.g. `$2.03/SF × 4'×8' = $64.96`).
+
+## Draft PO email
+
+The **”Draft Email w/ PDF”** button next to **Export Custom PDF** on an Innergy
+purchase-order page. Clicking it:
 
 1. Exports the PO PDF using Innergy’s existing **Export Custom PDF** button.
 2. Drafts a new email in **Apple Mail** or **Microsoft Outlook** (your choice)
