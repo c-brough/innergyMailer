@@ -1,12 +1,15 @@
 # InnerCider
 
-A Chrome extension (+ native helper) with two tools for Innergy:
+A Chrome extension (+ native helper) with three tools for Innergy:
 
 1. **Draft PO email** — a **”Draft Email w/ PDF”** button next to **Export Custom
    PDF** on a purchase-order page (details below).
 2. **Materials total cost** — on the Materials grid, shows the total cost per
    **Default UoM** / **Purchasing UoM** next to each value (unit `Cost` × the
    size’s conversion to the base unit, e.g. `$2.03/SF × 4'×8' = $64.96`).
+3. **BOM backlinks** *(optional, off until configured)* — on a work order’s
+   **Shipment Items** grid, adds a **`BOM <n> ↗`** chip to each item pushed from
+   a BOM app, linking back to the BOM it came from (details below).
 
 ## Draft PO email
 
@@ -20,6 +23,48 @@ purchase-order page. Clicking it:
    - **Body** = a brief summary of the line items in the PO’s **Materials** grid.
 
 The draft is left **open and unsent** so you can review and send it yourself.
+
+## BOM backlinks
+
+**Off by default.** There is intentionally no built-in BOM app address — this
+extension is shared beyond CPW, and a hardcoded default would point other
+shops’ installs at someone else’s app. Set the address in the extension’s
+Options page (**BOM app backlinks**) to switch the feature on; leave it blank
+and the feature never runs — no query, no chips, no network traffic. Only
+`http://` and `https://` addresses are accepted.
+
+Once configured: on `#/projects/{projectId}/workOrder/{woId}/shipment-items`,
+each shipment item that originated in the BOM app gets a small **`BOM <n> ↗`**
+chip next to its name, opening `<your-bom-app>/?bom=<n>` in a new tab.
+
+> The engineering-id format this matches (`cpwbom-{bomId}-asm-{assemblyId}`) is
+> currently CPW-BOM’s. A different BOM app would also need `ENG_RE` in
+> `extension/content/features/bom-backlinks.js` made configurable.
+
+The link key is already in the data: CPW-BOM pushes one shipment item per BOM
+assembly stamped with `InternalEngineeringId: cpwbom-{bomId}-asm-{assemblyId}`,
+and that id survives the EngineeringSync staging → work-order promotion, coming
+back as the row’s `EngineeringId`. Nothing extra is written to Innergy.
+
+Two things make this less trivial than reading a cell:
+
+- **The id isn’t on the page.** There’s no *Engineering ID* column in the default
+  view, and the DevExtreme grid instance isn’t reachable (React bundle, no
+  `window.DevExpress`). So the feature re-runs the grid’s own
+  `ShipmentItemsListQuery` against `query/run` with the session cookie — the same
+  authenticated-fetch pattern the PO-files code uses — and reads `EngineeringId`
+  from the response.
+- **Rows are matched by name, not position.** The grid’s row order follows
+  whatever sort/filter/page the user picked, which an independent fetch doesn’t
+  know about; index-matching silently yields *wrong* links (an unsorted fetch
+  comes back in a different order than the rendered rows). Matching on
+  **Shipment Item Name** is order-independent. If one work order has two rows
+  with the same name mapping to *different* BOMs, that name is ambiguous and
+  **neither row is annotated** — a missing chip is recoverable, a confidently
+  wrong one isn’t.
+
+The result is cached per work order, so the MutationObserver doesn’t re-query on
+every DOM change. Rows not pushed by the BOM app are left untouched.
 
 ## Privacy
 
@@ -40,7 +85,8 @@ extension/                        Chrome extension (load unpacked)
   manifest.json                   MV3 manifest; pins a fixed extension ID via “key”
   content/                        Content scripts (see ARCHITECTURE.md for the module map)
     core.js                       Shared window.InnerCider namespace + Innergy access layer
-    features/                     One file per content-script feature (draft-email, materials-cost)
+    features/                     One file per content-script feature (draft-email,
+                                  materials-cost, bom-backlinks)
     bootstrap.js                  Single MutationObserver that mounts every registered feature
   background/                     Background service worker (ES modules)
     background.js                 Entry point: message router + download watcher
@@ -170,6 +216,14 @@ Outlook must support AppleScript (classic Outlook does).
 - **macOS**: `innergy_mailer_host.py` runs AppleScript via `osascript`.
 - **Windows**: `innergy_mailer_host_win.py` uses `win32com.client` to drive
   `Outlook.Application` COM automation.
+- **content/features/bom-backlinks.js** runs only on the work-order
+  **Shipment Items** route. It POSTs the grid's own `ShipmentItemsListQuery` to
+  `query/run` (session cookie, `text/plain` body to match the app and avoid a
+  CORS preflight), keeps a `Shipment Item Name → bomId` map cached per work
+  order, and appends a link chip to the **Shipment Item Name** cell — located by
+  its `aria-colindex` so reordering columns can't misplace it, and only in the
+  scrollable content table, never the pinned `dx-datagrid-content-fixed` gutter.
+  Names that map to two different BOMs are skipped rather than guessed.
 
 ## Troubleshooting
 
@@ -194,6 +248,16 @@ Outlook must support AppleScript (classic Outlook does).
   position (Name=1, Description=2, UoM=3, Qty Ordered=4, Extended Cost=7). If you
   reorder columns in Innergy’s saved view, update the `COL` map in
   `extension/content/features/draft-email.js`.
+- **No `BOM ↗` chips on a work order** — first check the **BOM app backlinks**
+  address is set in Options; blank (or not `http(s)://`) keeps the feature off by
+  design. Otherwise expected when the shipment items weren’t pushed from the BOM
+  app (only rows whose `EngineeringId` matches
+  `cpwbom-<bomId>-asm-<assemblyId>` are linked). If they *were* pushed, open the
+  console and look for `[InnerCider]` warnings: a failed `query/run` is retried
+  after 30s. A chip missing from just one row usually means two rows in that work
+  order share a name but came from different BOMs — the extension skips those
+  rather than risk linking to the wrong BOM. Rename one of the assemblies in
+  CPW-BOM and re-push to resolve it.
 
 ## Uninstall
 

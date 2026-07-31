@@ -30,7 +30,11 @@ function updateGraphVisibility(value) {
 const DEFAULT_APP = isWindows ? "outlook_classic" : "mail";
 
 // Load saved settings.
-chrome.storage.local.get(["mailApp", "azureClientId", "graphAuthed"], (data) => {
+chrome.storage.local.get(["mailApp", "azureClientId", "graphAuthed", "bomBaseUrl"], (data) => {
+  if (data.bomBaseUrl) {
+    document.getElementById("bom-base-url").value = data.bomBaseUrl;
+    renderBomUrlStatus(data.bomBaseUrl);
+  }
   const value = data.mailApp || DEFAULT_APP;
   const input = document.querySelector(`input[name="mailApp"][value="${value}"]`);
   if (input && !input.disabled) {
@@ -64,6 +68,41 @@ document.getElementById("client-id").addEventListener("input", (e) => {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     chrome.storage.local.set({ azureClientId: e.target.value.trim() });
+    showSaved();
+  }, 600);
+});
+
+// Save the BOM app address as the user types (debounced). There is no default:
+// blank means "no BOM app", which turns the backlink feature off entirely.
+// Mirrors normalizeBase() in content/features/bom-backlinks.js — anything this
+// rejects, the content script also ignores, so flag it here rather than let it
+// fail silently on the Innergy page.
+function bomUrlIsUsable(raw) {
+  if (!raw) return true; // blank is valid: feature off
+  try {
+    const u = new URL(raw);
+    return u.protocol === "https:" || u.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+function renderBomUrlStatus(raw) {
+  const input = document.getElementById("bom-base-url");
+  const status = document.getElementById("bom-base-url-status");
+  const ok = bomUrlIsUsable(raw);
+  input.classList.toggle("invalid", !ok);
+  status.textContent = ok ? "" : "Needs a full http:// or https:// address — backlinks stay off until this is valid.";
+  return ok;
+}
+
+let bomSaveTimer;
+document.getElementById("bom-base-url").addEventListener("input", (e) => {
+  const raw = e.target.value.trim();
+  renderBomUrlStatus(raw);
+  clearTimeout(bomSaveTimer);
+  bomSaveTimer = setTimeout(() => {
+    chrome.storage.local.set({ bomBaseUrl: raw });
     showSaved();
   }, 600);
 });

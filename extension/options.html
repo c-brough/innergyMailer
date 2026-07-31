@@ -54,11 +54,32 @@
       #auth-status.inf { color: #555; }
 
       #status { margin-top: 14px; height: 18px; color: #2e7d32; font-weight: 600; }
+
+      .fs-note { margin: 0 0 10px; font-size: 13px; color: #444; line-height: 1.5; }
+      .chip-demo {
+        display: inline-block; padding: 0 6px; font-size: 11px; font-weight: 600;
+        line-height: 15px; color: #1a56db; background: #eef2fd;
+        border: 1px solid #c7d0f8; border-radius: 4px; vertical-align: middle;
+      }
+      #bom-base-url {
+        width: 100%; box-sizing: border-box; font: 13px monospace;
+        padding: 5px 8px; border: 1px solid #ccc; border-radius: 6px;
+      }
+      #bom-base-url.invalid { border-color: #c62828; background: #fff6f6; }
+      #bom-base-url-status { font-size: 12px; margin-top: 6px; min-height: 16px; color: #c62828; }
+      .tag {
+        font-size: 10px; font-weight: 600; text-transform: uppercase;
+        letter-spacing: .04em; color: #777; background: #f0f0f0;
+        border: 1px solid #ddd; border-radius: 3px; padding: 1px 5px;
+        vertical-align: 1px;
+      }
     </style>
   </head>
   <body>
     <h1>InnerCider</h1>
-    <p class="sub">Choose which app should open the drafted email.</p>
+    <p class="sub">Settings for the Innergy tools.</p>
+
+    <p class="fs-note">Which app should open the drafted PO email:</p>
 
     <fieldset id="fs-mac">
       <legend>macOS</legend>
@@ -109,6 +130,19 @@
         </div>
         <div id="auth-status" class="inf"></div>
       </div>
+    </fieldset>
+
+    <fieldset id="fs-bom">
+      <legend>BOM app backlinks <span class="tag">optional</span></legend>
+      <p class="fs-note">
+        If your shop pushes work-order shipment items from a BOM app, enter its
+        address and each pushed item gets a <span class="chip-demo">BOM ↗</span>
+        link back to the BOM it came from.
+        <strong>Leave blank if you don’t use one</strong> — the feature stays off.
+      </p>
+      <input id="bom-base-url" type="url" spellcheck="false"
+             placeholder="https://your-bom-app.example.com" />
+      <div id="bom-base-url-status"></div>
     </fieldset>
 
     <div id="status"></div>
