@@ -7,9 +7,10 @@ A Chrome extension (+ native helper) with three tools for Innergy:
 2. **Materials total cost** — on the Materials grid, shows the total cost per
    **Default UoM** / **Purchasing UoM** next to each value (unit `Cost` × the
    size’s conversion to the base unit, e.g. `$2.03/SF × 4'×8' = $64.96`).
-3. **BOM backlinks** *(optional, off until configured)* — on a work order’s
-   **Shipment Items** grid, adds a **`BOM <n> ↗`** chip to each item pushed from
-   a BOM app, linking back to the BOM it came from (details below).
+3. **BOM backlinks** *(optional, off until configured)* — on the **Shipment
+   Items** grids (both a work order’s and the project-wide shipping one), adds a
+   **`BOM <n> ↗`** chip to each item pushed from a BOM app, linking back to the
+   BOM it came from (details below).
 
 ## Draft PO email
 
@@ -33,9 +34,15 @@ Options page (**BOM app backlinks**) to switch the feature on; leave it blank
 and the feature never runs — no query, no chips, no network traffic. Only
 `http://` and `https://` addresses are accepted.
 
-Once configured: on `#/projects/{projectId}/workOrder/{woId}/shipment-items`,
-each shipment item that originated in the BOM app gets a small **`BOM <n> ↗`**
-chip next to its name, opening `<your-bom-app>/?bom=<n>` in a new tab.
+Once configured, each shipment item that originated in the BOM app gets a small
+**`BOM <n> ↗`** chip next to its name, opening `<your-bom-app>/?bom=<n>` in a
+new tab. Two grids are covered — they share one query type and row shape but are
+different grids with different columns (note the two spellings):
+
+| Grid | Route |
+|---|---|
+| Work order → Shipment Items | `#/projects/{projectId}/workOrder/{woId}/shipment-items` |
+| Project → Shipping → Shipment Items | `#/projects/{projectId}/shipping/shipmentItems` |
 
 > The engineering-id format this matches (`cpwbom-{bomId}-asm-{assemblyId}`) is
 > currently CPW-BOM’s. A different BOM app would also need `ENG_RE` in
@@ -54,12 +61,17 @@ Two things make this less trivial than reading a cell:
   `ShipmentItemsListQuery` against `query/run` with the session cookie — the same
   authenticated-fetch pattern the PO-files code uses — and reads `EngineeringId`
   from the response.
-- **Rows are matched by name, not position.** The grid’s row order follows
+- **Rows are matched by key, not position.** The grid’s row order follows
   whatever sort/filter/page the user picked, which an independent fetch doesn’t
   know about; index-matching silently yields *wrong* links (an unsorted fetch
   comes back in a different order than the rendered rows). Matching on
-  **Shipment Item Name** is order-independent. If one work order has two rows
-  with the same name mapping to *different* BOMs, that name is ambiguous and
+  **Shipment Item Name** is order-independent.
+- **The project grid needs a stronger key.** It spans every work order in the
+  project, so two work orders that each have a “Cabinet 1” from different BOMs
+  would collide on name alone. That grid also renders a **WO Number** column, so
+  when it’s present the key becomes **WO Number + name**. The work-order grid has
+  no such column (every row is the same WO) and uses the name by itself.
+  Whichever key applies, one that resolves to two different BOMs is ambiguous and
   **neither row is annotated** — a missing chip is recoverable, a confidently
   wrong one isn’t.
 
@@ -216,14 +228,19 @@ Outlook must support AppleScript (classic Outlook does).
 - **macOS**: `innergy_mailer_host.py` runs AppleScript via `osascript`.
 - **Windows**: `innergy_mailer_host_win.py` uses `win32com.client` to drive
   `Outlook.Application` COM automation.
-- **content/features/bom-backlinks.js** runs only on the work-order
-  **Shipment Items** route. It POSTs the grid's own `ShipmentItemsListQuery` to
-  `query/run` (session cookie, `text/plain` body to match the app and avoid a
-  CORS preflight), keeps a `Shipment Item Name → bomId` map cached per work
-  order, and appends a link chip to the **Shipment Item Name** cell — located by
-  its `aria-colindex` so reordering columns can't misplace it, and only in the
-  scrollable content table, never the pinned `dx-datagrid-content-fixed` gutter.
-  Names that map to two different BOMs are skipped rather than guessed.
+- **content/features/bom-backlinks.js** runs on the two **Shipment Items**
+  routes. It POSTs the grid's own `ShipmentItemsListQuery` to `query/run`
+  (session cookie, `text/plain` body to match the app and avoid a CORS
+  preflight) — with `WorkOrderId` set on the work-order grid and `null` on the
+  project one — and caches the resulting map per scope (`{projectId}:{woId|*}`,
+  so the two grids never share an entry). It appends a link chip to the
+  **Shipment Item Name** cell, located by its `aria-colindex`: that column sits
+  at a *different* index on each grid, so the lookup is load-bearing, not just
+  defensive. Chips go only in the scrollable content table, never the pinned
+  `dx-datagrid-content-fixed` gutter. Keys that resolve to two different BOMs
+  are skipped rather than guessed, and the map refetches (throttled) when a
+  rendered row's name wasn't in the last response — i.e. rows promoted from a
+  re-push while the tab is open.
 
 ## Troubleshooting
 
@@ -248,16 +265,18 @@ Outlook must support AppleScript (classic Outlook does).
   position (Name=1, Description=2, UoM=3, Qty Ordered=4, Extended Cost=7). If you
   reorder columns in Innergy’s saved view, update the `COL` map in
   `extension/content/features/draft-email.js`.
-- **No `BOM ↗` chips on a work order** — first check the **BOM app backlinks**
-  address is set in Options; blank (or not `http(s)://`) keeps the feature off by
-  design. Otherwise expected when the shipment items weren’t pushed from the BOM
-  app (only rows whose `EngineeringId` matches
+- **No `BOM ↗` chips on a Shipment Items grid** — first check the **BOM app
+  backlinks** address is set in Options; blank (or not `http(s)://`) keeps the
+  feature off by design. Otherwise expected when the shipment items weren’t
+  pushed from the BOM app (only rows whose `EngineeringId` matches
   `cpwbom-<bomId>-asm-<assemblyId>` are linked). If they *were* pushed, open the
   console and look for `[InnerCider]` warnings: a failed `query/run` is retried
-  after 30s. A chip missing from just one row usually means two rows in that work
-  order share a name but came from different BOMs — the extension skips those
-  rather than risk linking to the wrong BOM. Rename one of the assemblies in
-  CPW-BOM and re-push to resolve it.
+  after 30s.
+- **A chip missing from just one row** — that row's key resolves to two different
+  BOMs, so the extension skips it rather than risk linking to the wrong one. On
+  the work-order grid the key is the shipment item name; on the project grid it's
+  **WO Number + name**. Rename one of the colliding assemblies in the BOM app and
+  re-push to resolve it.
 
 ## Uninstall
 
