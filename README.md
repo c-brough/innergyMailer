@@ -38,12 +38,17 @@ builds the Outlook/Mail draft. Separate host scripts exist for macOS and Windows
 ```
 extension/                        Chrome extension (load unpacked)
   manifest.json                   MV3 manifest; pins a fixed extension ID via “key”
-  content.js                      Injects the button, scrapes PO#/vendor/materials
-  background.js                   Captures the download, calls the native host
+  content/                        Content scripts (see ARCHITECTURE.md for the module map)
+    core.js                       Shared window.InnerCider namespace + Innergy access layer
+    features/                     One file per content-script feature (draft-email, materials-cost)
+    bootstrap.js                  Single MutationObserver that mounts every registered feature
+  background/                     Background service worker (ES modules)
+    background.js                 Entry point: message router + download watcher
+    features/                     One file per background feature (draft-email, graph-auth)
+    shared/                       Native-messaging, session storage, logging helpers
 native-host/
   innergy_mailer_host.py          macOS host — drafts via AppleScript (osascript)
   innergy_mailer_host_win.py      Windows host — drafts via Outlook COM (pywin32)
-  run-host.sh                     macOS wrapper (created by install.sh)
   run-host.bat                    Windows wrapper (created by install_windows.ps1)
   com.innergy.mailer.json         Native-messaging manifest (written by installer)
 install.sh                        macOS installer
@@ -87,7 +92,7 @@ can request permission to write to your mailbox.
 
 1. Go to [portal.azure.com](https://portal.azure.com) → **Azure Active Directory**
    → **App registrations** → **New registration**.
-   - Name: anything (e.g. `Innergy Mailer`)
+   - Name: anything (e.g. `InnerCider`)
    - Supported account types: **Accounts in any organizational directory and personal
      Microsoft accounts** (the “multi-tenant + personal” option)
    - Redirect URI: leave blank
@@ -114,6 +119,13 @@ PDF (plus any PO file attachments).
 ./install.sh
 ```
 
+This copies the native host to `~/Library/Application Support/InnerCider/`
+and registers it with every installed Chromium-family browser. The host is
+installed there — **not** inside the repo — because `~/Documents`, `~/Desktop`,
+and `~/Downloads` are macOS TCC-protected folders that Chrome is not allowed to
+*launch* a native-messaging host from; doing so makes the host silently "exit"
+and no draft is created.
+
 By default the draft opens in **Apple Mail**. To use **Microsoft Outlook**,
 open the extension’s options (right-click icon → **Options**) and select it.
 Outlook must support AppleScript (classic Outlook does).
@@ -131,20 +143,20 @@ Outlook must support AppleScript (classic Outlook does).
 
 ## How it works
 
-- **content.js** waits (via a `MutationObserver`) for
-  `button[data-testid=”ExportCustomReportDefault_single”]`, injects our button
-  before it, and on click scrapes:
+- **content/features/draft-email.js** waits (via the shared bootstrap's
+  `MutationObserver`) for `button[data-testid=”ExportCustomReportDefault_single”]`,
+  injects our button before it, and on click scrapes:
   - PO# from `[data-testid=”purchase-order-header”]` / breadcrumb / title,
   - vendor from the **Vendor (Company - Office)** label’s linked value,
   - materials from the **Materials** `[role=”grid”]` (Material Name, UoM,
     Quantity Ordered, Extended Cost).
-- It tells **background.js** to arm a download watcher, then clicks the real
-  export button.
+- It tells **background/features/draft-email.js** to arm a download watcher,
+  then clicks the real export button.
 - Innergy names the exported file with a random GUID (e.g. `6448ef99-….pdf`), so
-  there is no PO number in the filename to validate against. **background.js**
-  therefore captures the first download that **completes after the click** and is
-  a PDF (by MIME or `.pdf` extension); downloads that began before the click are
-  rejected.
+  there is no PO number in the filename to validate against. The background
+  feature therefore captures the first download that **completes after the
+  click** and is a PDF (by MIME or `.pdf` extension); downloads that began
+  before the click are rejected.
 - It also fetches the PO’s **Files tab** attachments via the same API the app
   uses (`PurchaseOrderAttachmentsQuery`). Each file’s **`innergyEmailAttach`**
   custom field decides what happens:
@@ -168,9 +180,20 @@ Outlook must support AppleScript (classic Outlook does).
   - Windows: confirm `pywin32` is installed (`pip show pywin32`) and classic
     Outlook is present.
   - macOS: confirm Mail.app or Outlook has at least one account configured.
+- **macOS: "Native host has exited" / nothing opens, PDF just downloads** — the
+  host is being blocked by macOS privacy (TCC) protection. Two things to check:
+  1. The host must be installed under `~/Library/Application Support/InnerCider/`,
+     not inside `~/Documents`. Re-run `./install.sh` (it installs there now).
+  2. The host reads the exported PDF from `~/Downloads`. Grant your browser
+     **Full Disk Access** (System Settings → Privacy & Security → Full Disk
+     Access → add your browser), then **fully quit and reopen** the browser.
+  Also make sure PDFs are set to **download** (not open in-browser) at
+  `chrome://settings/content/pdfDocuments`, and on first run allow the
+  "wants to control Microsoft Outlook" automation prompt.
 - **Wrong materials columns** — the scraper reads the Materials grid by column
   position (Name=1, Description=2, UoM=3, Qty Ordered=4, Extended Cost=7). If you
-  reorder columns in Innergy’s saved view, update the `COL` map in `content.js`.
+  reorder columns in Innergy’s saved view, update the `COL` map in
+  `extension/content/features/draft-email.js`.
 
 ## Uninstall
 
@@ -189,3 +212,11 @@ rm -f “$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts/co
 ```
 
 Then remove the extension from `chrome://extensions`.
+
+## Contributing / adding a feature
+
+InnerCider is meant to grow into a toolkit of CPW-specific Innergy tools, not
+stay a single-purpose extension. See [ARCHITECTURE.md](ARCHITECTURE.md) for
+how the extension and native host are structured, and
+[docs/adding-a-feature.md](docs/adding-a-feature.md) for the concrete steps
+(with a template file to copy from) to add a new one.

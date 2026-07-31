@@ -1,4 +1,4 @@
-/* Innergy Mailer — content script
+/* InnerCider — Draft PO Email feature
  *
  * Injects a "Draft Email w/ PDF" button immediately to the LEFT of the
  * existing "Export Custom PDF" button on an Innergy purchase-order page.
@@ -14,12 +14,11 @@
 (() => {
   "use strict";
 
+  const IC = window.InnerCider;
   const EXPORT_BTN_SELECTOR = 'button[data-testid="ExportCustomReportDefault_single"]';
-  const OUR_BTN_ID = "innergy-mailer-draft-btn";
+  const OUR_BTN_ID = "innercider-draft-email-btn";
 
-  console.log("[InnergyMailer] content script v4 loaded");
-
-  // ---- DOM scraping ---------------------------------------------------------
+  // ---- DOM scraping -----------------------------------------------------------
 
   function getPoNumber() {
     // Prefer the page header, then the breadcrumb, then the tab title.
@@ -129,44 +128,6 @@
     return `${header}\n${lines.join("\n")}`;
   }
 
-  // ---- PO file attachments --------------------------------------------------
-
-  function getPoId() {
-    const m = location.hash.match(/purchaseOrders\/([0-9a-f-]+)/i);
-    return m ? m[1] : null;
-  }
-
-  // Fetch the files attached to this PO via the same API the Files tab uses.
-  // Returns [{ name, url, flag }] for real files (folders and entries without a
-  // download URL are skipped). `flag` is the innergyEmailAttach custom field
-  // value ("yes" | "no" | "" if unset). Resolves to [] on any problem.
-  async function fetchPoFiles() {
-    const poId = getPoId();
-    if (!poId) return [];
-    const query = JSON.stringify({
-      PurchaseOrderId: poId,
-      $type: "PurchaseOrderAttachmentsQuery",
-    });
-    const url = "https://app.innergy.com/query/run?query=" + encodeURIComponent(query);
-    try {
-      const resp = await fetch(url, { credentials: "include" });
-      if (!resp.ok) return [];
-      const json = await resp.json();
-      return (json.data || [])
-        .filter((it) => it && it.IsFolder === false && it.Name && it.Name.Url)
-        .map((it) => ({
-          name: (it.Name.DisplayName || it.Name.Title || "attachment").trim(),
-          url: it.Name.Url,
-          flag: String((it.CustomFields && it.CustomFields.innergyEmailAttach) || "")
-            .trim()
-            .toLowerCase(),
-        }));
-    } catch (e) {
-      console.warn("[InnergyMailer] Could not fetch PO files:", e);
-      return [];
-    }
-  }
-
   // Decide which files to attach from the innergyEmailAttach flag:
   //   yes -> attach, no -> skip, anything else -> ask the user.
   function categorizeFiles(files) {
@@ -180,7 +141,7 @@
     return { include, undecided };
   }
 
-  // ---- Button injection -----------------------------------------------------
+  // ---- Button injection -------------------------------------------------------
 
   function makeButton(exportBtn) {
     const btn = document.createElement("button");
@@ -202,7 +163,7 @@
     exportBtn.parentElement.insertBefore(btn, exportBtn);
   }
 
-  // ---- Click handler --------------------------------------------------------
+  // ---- Click handler ------------------------------------------------------------
 
   async function onClick(ev) {
     ev.preventDefault();
@@ -210,7 +171,7 @@
 
     const exportBtn = document.querySelector(EXPORT_BTN_SELECTOR);
     if (!exportBtn) {
-      alert("Innergy Mailer: couldn't find the Export Custom PDF button.");
+      alert("InnerCider: couldn't find the Export Custom PDF button.");
       return;
     }
 
@@ -225,9 +186,7 @@
       `${buildSummary(items)}\n`;
 
     if (!to) {
-      console.warn(
-        "[InnergyMailer] No vendor contact email found; drafting without a recipient."
-      );
+      IC.warn("No vendor contact email found; drafting without a recipient.");
     }
 
     const me = ev.currentTarget;
@@ -243,10 +202,10 @@
     const draftContext = { exportBtn, subject, body, to, poNumber, me, original };
 
     // Collect files attached to the PO and decide per the innergyEmailAttach flag.
-    const files = await fetchPoFiles();
+    const files = await IC.innergy.fetchPoFiles();
     const { include, undecided } = categorizeFiles(files);
-    console.log(
-      `[InnergyMailer] files: ${files.length} (yes=${include.length}, ask=${undecided.length})`,
+    IC.log(
+      `files: ${files.length} (yes=${include.length}, ask=${undecided.length})`,
       { include: include.map((f) => f.name), undecided: undecided.map((f) => f.name) }
     );
 
@@ -274,14 +233,14 @@
 
     const payload = files.map((f) => ({ name: f.name, url: f.url }));
     const msg = { type: "EXPORT_AND_MAIL", subject, body, to, poNumber, files: payload };
-    console.log("[InnergyMailer] click → arming", { poNumber, to, subject, files: payload.length });
+    IC.log("click → arming", { poNumber, to, subject, files: payload.length });
     chrome.runtime.sendMessage(msg, (resp) => {
-      console.log("[InnergyMailer] arm response:", resp, chrome.runtime.lastError && chrome.runtime.lastError.message);
+      IC.log("arm response:", resp);
       if (chrome.runtime.lastError || !resp || !resp.armed) {
         me.textContent = original;
         me.disabled = false;
         alert(
-          "Innergy Mailer: background worker did not respond. Is the extension loaded correctly?"
+          "InnerCider: background worker did not respond. Is the extension loaded correctly?"
         );
         return;
       }
@@ -295,15 +254,15 @@
     });
   }
 
-  // ---- File selection prompt ------------------------------------------------
+  // ---- File selection prompt ---------------------------------------------------
 
   function showFilePrompt(files, { onConfirm, onCancel }) {
     // Remove any existing prompt first.
-    const prev = document.getElementById("innergy-mailer-prompt");
+    const prev = document.getElementById("innercider-file-prompt");
     if (prev) prev.remove();
 
     const overlay = document.createElement("div");
-    overlay.id = "innergy-mailer-prompt";
+    overlay.id = "innercider-file-prompt";
     Object.assign(overlay.style, {
       position: "fixed",
       inset: "0",
@@ -412,13 +371,13 @@
     document.body.appendChild(overlay);
   }
 
-  // ---- Outcome banner -------------------------------------------------------
+  // ---- Outcome banner -----------------------------------------------------------
 
   function showBanner(ok, message) {
-    const existing = document.getElementById("innergy-mailer-banner");
+    const existing = document.getElementById("innercider-banner");
     if (existing) existing.remove();
     const el = document.createElement("div");
-    el.id = "innergy-mailer-banner";
+    el.id = "innercider-banner";
     el.textContent = (ok ? "✓ " : "✗ ") + message;
     Object.assign(el.style, {
       position: "fixed",
@@ -438,133 +397,8 @@
 
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg && msg.type === "MAIL_RESULT") showBanner(msg.ok, msg.message);
-    if (msg && msg.type === "DEBUG") console.log("[InnergyMailer][bg]", msg.text, msg.data || "");
+    if (msg && msg.type === "DEBUG") console.log("[InnerCider][bg]", msg.text, msg.data || "");
   });
 
-  // ---- Materials grid: total cost per Default/Purchasing UoM ---------------
-  // On the Materials list grid, the "Cost" column is the unit cost per Base UoM
-  // (e.g. $2.03/SF). Next to the Default UoM and Purchasing UoM values (e.g.
-  // "4'x8'") we show the total cost for one of those units — unit cost × the
-  // conversion factor. Innergy stores no separate factor: for size-based UoM
-  // groups it derives the factor from the dimensional size name itself
-  // (SF: W'×H'; LF: length; EA: 1), which is exactly what we replicate.
-
-  const IC_MARK = "innercider-total";
-
-  function icParseMoney(txt) {
-    if (!txt) return null;
-    const m = txt.replace(/[, ]/g, "").match(/(\d+(?:\.\d+)?)/);
-    return m ? parseFloat(m[1]) : null;
-  }
-
-  // Conversion factor from a common-size name to the base unit, or null if it
-  // can't be determined (then we don't annotate rather than show a wrong value).
-  function icFactor(sizeName, baseCode) {
-    const s = (sizeName || "").trim();
-    const b = (baseCode || "").trim().toUpperCase();
-    if (!s || !b) return null;
-    if (s.toUpperCase() === b) return 1; // e.g. LF size in an LF group
-    const norm = s.replace(/[’′]/g, "'").replace(/[”″]/g, '"');
-    // Square feet: "W'xH'" -> W*H
-    const area = norm.match(/^(\d+(?:\.\d+)?)\s*'?\s*[x×]\s*(\d+(?:\.\d+)?)\s*'?$/i);
-    if (area && b === "SF") return parseFloat(area[1]) * parseFloat(area[2]);
-    // Linear feet: single dimension "L'" -> L
-    const len = norm.match(/^(\d+(?:\.\d+)?)\s*'?$/);
-    if (len && b === "LF") return parseFloat(len[1]);
-    if (b === "EA") return 1;
-    return null;
-  }
-
-  function icMoney(v) {
-    return "$" + v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  }
-
-  function icAnnotateCell(cell, cost, base) {
-    const existing = cell.querySelector("." + IC_MARK);
-    // The pure size name: stored when we first annotated (survives our own span);
-    // otherwise the cell's current text (no span yet).
-    const sizeName = existing && cell.dataset.icSize != null
-      ? cell.dataset.icSize
-      : cell.textContent.trim();
-    const factor = icFactor(sizeName, base);
-    if (factor == null) {
-      if (existing) existing.remove();
-      return;
-    }
-    cell.dataset.icSize = sizeName;
-    const text = icMoney(cost * factor);
-    if (existing) {
-      if (existing.textContent !== text) existing.textContent = text;
-      return;
-    }
-    const span = document.createElement("span");
-    span.className = IC_MARK;
-    span.textContent = text;
-    // Small modern chip that blends with the grid styling.
-    Object.assign(span.style, {
-      display: "inline-block",
-      marginLeft: "6px",
-      padding: "0 6px",
-      fontSize: "11px",
-      fontWeight: "600",
-      lineHeight: "15px",
-      color: "#1e7e34",
-      background: "#eef7f0",
-      border: "1px solid #cfe8d5",
-      borderRadius: "4px",
-      verticalAlign: "middle",
-      whiteSpace: "nowrap",
-    });
-    cell.appendChild(span);
-  }
-
-  function annotateMaterialsGrid() {
-    if (!/#\/materials\/materials\//.test(location.hash)) return;
-    // Find the main materials grid's header row (there are other dx grids on the
-    // page, e.g. the navigation tree).
-    let header = null;
-    for (const r of document.querySelectorAll("tr.dx-header-row")) {
-      if (/\bCost\b/.test(r.textContent) && /UoM/i.test(r.textContent)) { header = r; break; }
-    }
-    if (!header) return;
-    // Map header label -> aria-colindex (robust to column reordering).
-    const col = {};
-    for (const td of header.children) {
-      const t = td.textContent.trim();
-      const ci = td.getAttribute("aria-colindex");
-      if (t && ci) col[t] = ci;
-    }
-    const ciCost = col["Cost"], ciBase = col["Base UoM"];
-    const targets = [col["Default UoM"], col["Purchasing UoM"]].filter(Boolean);
-    if (!ciCost || !ciBase || !targets.length) return;
-    const grid = header.closest(".dx-datagrid");
-    if (!grid) return;
-    for (const row of grid.querySelectorAll("tr.dx-data-row")) {
-      const costCell = row.querySelector(`td[aria-colindex="${ciCost}"]`);
-      const baseCell = row.querySelector(`td[aria-colindex="${ciBase}"]`);
-      if (!costCell || !baseCell) continue;
-      const cost = icParseMoney(costCell.textContent);
-      const base = baseCell.textContent.trim();
-      if (cost == null) continue;
-      for (const ci of targets) {
-        for (const cell of row.querySelectorAll(`td[aria-colindex="${ci}"]`)) {
-          icAnnotateCell(cell, cost, base);
-        }
-      }
-    }
-  }
-
-  let icScheduled = false;
-  function scheduleAnnotate() {
-    if (icScheduled) return;
-    icScheduled = true;
-    setTimeout(() => { icScheduled = false; try { annotateMaterialsGrid(); } catch (e) {} }, 250);
-  }
-
-  // ---- SPA-aware mounting ---------------------------------------------------
-  // Innergy is a single-page app; toolbars/grids mount and unmount on navigation.
-  const observer = new MutationObserver(() => { injectButton(); scheduleAnnotate(); });
-  observer.observe(document.body, { childList: true, subtree: true });
-  injectButton();
-  scheduleAnnotate();
+  IC.registerFeature({ id: "draft-email", mount: injectButton });
 })();
