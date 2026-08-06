@@ -29,6 +29,16 @@ export function handleGraphAuth(msg, sender, sendResponse) {
     }
     // Stash the user code in storage so options.js can display it via onChanged.
     chrome.storage.local.set({ graphAuthCode: r1.userCode, graphAuthUri: r1.verificationUri });
+    // The Linux host returns the sign-in URL instead of launching a browser
+    // itself; open it here. The macOS/Windows hosts open it on their own and
+    // send no openUrl, so this stays a no-op there.
+    // active: false keeps focus on the Options page, which is the only place the
+    // device code is shown — when the host returns a plain verification_uri (no
+    // embedded code), stealing focus would leave the user staring at a prompt for
+    // a code they can no longer read.
+    if (r1.openUrl) {
+      chrome.tabs.create({ url: r1.openUrl, active: false });
+    }
 
     // Step 2: wait for sign-in to complete (blocks in native host until done).
     dbg("auth_complete sending");

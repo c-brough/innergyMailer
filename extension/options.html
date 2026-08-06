@@ -38,7 +38,9 @@
       #graph-help code { background: #f0f0f0; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
       #graph-help a { color: #1a56db; }
 
-      #graph-setup { display: none; margin-top: 8px; padding: 12px 14px; background: #f5f7ff; border: 1px solid #c7d0f8; border-radius: 8px; }
+      /* Only shown while a Graph-backed mail app is selected; options.js toggles it. */
+      #fs-graph { display: none; }
+      #graph-setup { margin-top: 8px; padding: 12px 14px; background: #f5f7ff; border: 1px solid #c7d0f8; border-radius: 8px; }
       #graph-setup p { margin: 0 0 8px; font-size: 13px; color: #444; }
       #graph-setup a { color: #1a56db; }
       #client-id-row { display: flex; gap: 8px; align-items: center; }
@@ -102,25 +104,52 @@
       <label class="opt" id="opt-outlook-new">
         <input type="radio" name="mailApp" value="outlook_new" />
         New Outlook (Win)
-        <button type="button" class="help-btn" id="graph-help-btn" title="Azure setup instructions">?</button>
+        <button type="button" class="help-btn graph-help-btn" title="Azure setup instructions">?</button>
       </label>
+    </fieldset>
 
-      <div id="graph-help">
-        <strong>Azure App Registration — one-time setup</strong>
-        <ol>
-          <li>Go to <a href="https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank">portal.azure.com</a> → <strong>App registrations</strong> → <strong>New registration</strong>.<br>
-            Name: anything (e.g. <code>InnerCider</code>)<br>
-            Supported account types: <strong>Accounts in any organizational directory and personal Microsoft accounts</strong><br>
-            Redirect URI: leave blank → click <strong>Register</strong>
-          </li>
-          <li>Copy the <strong>Application (client) ID</strong> from the overview page.</li>
-          <li>Under <strong>API permissions</strong> → <strong>Add a permission</strong> → <strong>Microsoft Graph</strong> → <strong>Delegated</strong> → add <code>Mail.ReadWrite</code>.</li>
-          <li>Paste the Client ID below and click <strong>Sign in</strong>. A browser tab opens — sign in with your Microsoft account. The token is cached so you only do this once.</li>
-        </ol>
-      </div>
+    <fieldset id="fs-linux">
+      <legend>Linux</legend>
+      <label class="opt" id="opt-outlook-web">
+        <input type="radio" name="mailApp" value="outlook_web" />
+        Outlook on the web
+        <button type="button" class="help-btn graph-help-btn" title="Azure setup instructions">?</button>
+      </label>
+      <label class="opt" id="opt-linux-mail">
+        <input type="radio" name="mailApp" value="linux_mail" />
+        Default mail client (Thunderbird, Evolution…)
+      </label>
+      <p class="fs-note" id="linux-note">
+        Linux has no Outlook desktop app, so <strong>Outlook on the web</strong> is
+        the reliable route — the draft is created in your Microsoft 365 mailbox and
+        opened in a new tab. <strong>Default mail client</strong> needs a mail app
+        actually installed (Raspberry Pi OS ships none); without one, InnerCider
+        refuses rather than opening a compose window with the PDF missing.
+      </p>
+    </fieldset>
 
+    <!-- Sits OUTSIDE #fs-graph on purpose: the whole point of the "?" button is
+         reading these instructions BEFORE picking a Graph option, and #fs-graph
+         is hidden until one is selected. Nesting it there would make the button
+         a no-op in the default state. -->
+    <div id="graph-help">
+      <strong>Azure App Registration — one-time setup</strong>
+      <ol>
+        <li>Go to <a href="https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank">portal.azure.com</a> → <strong>App registrations</strong> → <strong>New registration</strong>.<br>
+          Name: anything (e.g. <code>InnerCider</code>)<br>
+          Supported account types: <strong>Accounts in any organizational directory and personal Microsoft accounts</strong><br>
+          Redirect URI: leave blank → click <strong>Register</strong>
+        </li>
+        <li>Copy the <strong>Application (client) ID</strong> from the overview page.</li>
+        <li>Under <strong>API permissions</strong> → <strong>Add a permission</strong> → <strong>Microsoft Graph</strong> → <strong>Delegated</strong> → add <code>Mail.ReadWrite</code>.</li>
+        <li>Paste the Client ID below and click <strong>Sign in</strong>. A browser tab opens — sign in with your Microsoft account. The token is cached so you only do this once.</li>
+      </ol>
+    </div>
+
+    <fieldset id="fs-graph">
+      <legend>Microsoft Graph sign-in</legend>
       <div id="graph-setup">
-        <p>New Outlook requires a one-time Microsoft sign-in via the Graph API.
+        <p>This option requires a one-time Microsoft sign-in via the Graph API.
           <a href="https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank">Register a free Azure app</a>
           and paste the <strong>Application (client) ID</strong> below.
         </p>

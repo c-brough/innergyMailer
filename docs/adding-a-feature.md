@@ -77,9 +77,12 @@ From the content script, send your message with
 
 Only needed if your feature must do something neither a content script nor
 the background worker can — e.g. write a file, drive another application.
-Add a new `action` (or message shape) to `native-host/innergy_mailer_host.py`
-and `innergy_mailer_host_win.py`, following the existing `auth_start` /
-`auth_complete` pattern for anything that needs multi-step back-and-forth.
+Add a new `action` (or message shape) to `native-host/innergy_mailer_host.py`,
+`innergy_mailer_host_win.py`, **and** `innergy_mailer_host_linux.py`, following
+the existing `auth_start` / `auth_complete` pattern for anything that needs
+multi-step back-and-forth. The three hosts are standalone by design (an
+installer only ever places one file), so a new action means three edits —
+skipping one leaves that platform silently unsupported.
 Keep the native-messaging host name (`com.innergy.mailer`) and the extension's
 manifest `key` unchanged — both are load-bearing for every existing install.
 

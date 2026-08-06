@@ -155,14 +155,29 @@ function downloadAndWait(url, name) {
 async function sendToHost(attachments, pending) {
   const stored = await chrome.storage.local.get(["mailApp", "azureClientId"]);
   // Match options.js: when nothing is saved yet, the default is OS-appropriate
-  // (Windows → Outlook Classic, otherwise Apple Mail). Without this the label
-  // wrongly read "Apple Mail" on Windows.
-  const isWindows = navigator.userAgent.includes("Windows");
-  const mailApp = stored.mailApp || (isWindows ? "outlook_classic" : "mail");
+  // (Windows → Outlook Classic, Linux → Outlook on the web, else Apple Mail).
+  // Without this the label wrongly read "Apple Mail" on Windows. The UA checks
+  // mirror options.js exactly — keep the two in sync.
+  const ua = navigator.userAgent;
+  const isWindows = ua.includes("Windows");
+  const isLinux = !isWindows && /Linux|X11/.test(ua) && !/Android|CrOS/.test(ua);
+  const os = isWindows ? "win" : isLinux ? "linux" : "mac";
+  const defaultApp = { win: "outlook_classic", linux: "outlook_web", mac: "mail" }[os];
+  // A saved value from another OS (copied profile, settings export) would be
+  // truthy but unusable — the host would reject it with a confusing error. Treat
+  // anything outside this OS's set as unset rather than forwarding it.
+  const OS_APPS = {
+    win: ["outlook_classic", "outlook_new"],
+    linux: ["outlook_web", "linux_mail"],
+    mac: ["mail", "outlook"],
+  };
+  const mailApp = OS_APPS[os].includes(stored.mailApp) ? stored.mailApp : defaultApp;
   const appLabel =
     mailApp === "outlook"         ? "Microsoft Outlook (Mac)" :
     mailApp === "outlook_classic" ? "Outlook Classic" :
     mailApp === "outlook_new"     ? "New Outlook" :
+    mailApp === "outlook_web"     ? "Outlook on the web" :
+    mailApp === "linux_mail"      ? "Default mail client" :
                                     "Apple Mail";
   const payload = {
     attachments,
@@ -182,6 +197,11 @@ async function sendToHost(attachments, pending) {
   }
   if (response && response.ok) {
     dbg("mail draft created", attachments);
+    // The Linux host never opens a browser itself (a host spawned by Chromium has
+    // no reliable claim on DISPLAY) — it hands back the draft's webLink instead.
+    if (response.openUrl) {
+      chrome.tabs.create({ url: response.openUrl });
+    }
     const extra = attachments.length - 1;
     const suffix = extra > 0 ? ` (+${extra} PO file${extra === 1 ? "" : "s"})` : "";
     const message = response.message || `${appLabel} draft created${suffix}.`;

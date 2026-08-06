@@ -88,7 +88,8 @@ your chosen mail app.
 
 Chrome extensions are sandboxed and cannot attach files to Mail. The extension
 therefore talks to a tiny local Python script (a “native messaging host”) that
-builds the Outlook/Mail draft. Separate host scripts exist for macOS and Windows.
+builds the Outlook/Mail draft. Separate host scripts exist for macOS, Windows,
+and Linux.
 
 ## Layout
 
@@ -107,11 +108,13 @@ extension/                        Chrome extension (load unpacked)
 native-host/
   innergy_mailer_host.py          macOS host — drafts via AppleScript (osascript)
   innergy_mailer_host_win.py      Windows host — drafts via Outlook COM (pywin32)
+  innergy_mailer_host_linux.py    Linux host — drafts via Graph API or xdg-email
   run-host.bat                    Windows wrapper (created by install_windows.ps1)
   com.innergy.mailer.json         Native-messaging manifest (written by installer)
 install.sh                        macOS installer
 install.bat                       Windows installer — double-click; auto-elevates and runs the .ps1
 install_windows.ps1               Windows installer (PowerShell; invoked by install.bat)
+install_linux.sh                  Linux installer (incl. Raspberry Pi OS)
 ```
 
 ## Install — Windows
@@ -188,6 +191,42 @@ By default the draft opens in **Apple Mail**. To use **Microsoft Outlook**,
 open the extension’s options (right-click icon → **Options**) and select it.
 Outlook must support AppleScript (classic Outlook does).
 
+## Install — Linux (incl. Raspberry Pi OS)
+
+**Requirement:** Python 3, plus `python3-venv` for the Outlook-on-the-web path.
+
+```bash
+sudo apt install python3-venv     # if not already present
+./install_linux.sh
+```
+
+This copies the host to `~/.local/share/InnerCider/`, builds a venv there with
+`msal` + `requests`, and writes the native-messaging manifest to
+`~/.config/chromium/NativeMessagingHosts/` (plus Chrome/Edge/Brave/Vivaldi if
+those profiles exist). The venv is required because Debian Bookworm and newer
+mark the system Python as externally-managed (PEP 668), so `pip install --user`
+fails outright.
+
+Two mail routes, both under **Linux** in the extension's options:
+
+- **Outlook on the web** (default, recommended) — drafts through the Microsoft
+  Graph API and opens the draft in a new tab. Needs the same one-time Azure app
+  registration + device-code sign-in as the Windows New Outlook path; see the
+  **?** button next to the option. This is the reliable route on a Pi, which
+  ships no mail client at all.
+- **Default mail client** — hands off to `xdg-email`, i.e. whatever desktop app
+  is registered for `mailto:` links (Thunderbird, Evolution, Geary). If no
+  handler is registered, the host raises an error instead of opening a compose
+  window, because `xdg-email` silently drops `--attach` in that case and the PDF
+  would go missing without warning.
+
+Arm64 and armv7l are fine — nothing here needs a compiled wheel.
+
+> **Snap/Flatpak Chromium:** those sandboxes normally refuse to launch a native
+> host from outside the sandbox, so draft-email won't work there. Raspberry Pi OS
+> ships the apt/deb Chromium, which has no such restriction. The installer warns
+> if it detects a confined build.
+
 ### Loading the extension (all platforms)
 
 1. Open `chrome://extensions`.
@@ -228,6 +267,11 @@ Outlook must support AppleScript (classic Outlook does).
 - **macOS**: `innergy_mailer_host.py` runs AppleScript via `osascript`.
 - **Windows**: `innergy_mailer_host_win.py` uses `win32com.client` to drive
   `Outlook.Application` COM automation.
+- **Linux**: `innergy_mailer_host_linux.py` either POSTs the draft to Microsoft
+  Graph or shells out to `xdg-email`. Unlike the other two hosts it never opens a
+  browser itself — a host spawned by Chromium has no reliable claim on `DISPLAY`,
+  so it returns `openUrl` and the background service worker calls
+  `chrome.tabs.create()`.
 - **content/features/bom-backlinks.js** runs on the two **Shipment Items**
   routes. It POSTs the grid's own `ShipmentItemsListQuery` to `query/run`
   (session cookie, `text/plain` body to match the app and avoid a CORS
@@ -251,6 +295,14 @@ Outlook must support AppleScript (classic Outlook does).
   - Windows: confirm `pywin32` is installed (`pip show pywin32`) and classic
     Outlook is present.
   - macOS: confirm Mail.app or Outlook has at least one account configured.
+  - Linux: `host.log` lives in `~/.local/share/InnerCider/`, not the repo.
+- **Linux: "Not signed in to Microsoft"** — the Graph draft path deliberately
+  won't start a device-code flow mid-draft (there's nowhere on the Innergy page to
+  show the code). Open the extension's Options page and click **Sign in** once,
+  then retry the draft.
+- **Linux: "The Python package 'msal' is not installed"** — the venv step was
+  skipped or had no network. Re-run `./install_linux.sh` (installing
+  `python3-venv` first if it warned about that).
 - **macOS: "Native host has exited" / nothing opens, PDF just downloads** — the
   host is being blocked by macOS privacy (TCC) protection. Two things to check:
   1. The host must be installed under `~/Library/Application Support/InnerCider/`,
@@ -292,6 +344,13 @@ Remove-Item “C:\innergy” -Recurse -Force -ErrorAction SilentlyContinue
 ```bash
 rm -f “$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.innergy.mailer.json”
 # (repeat for other browsers if you use them)
+```
+
+**Linux:**
+```bash
+rm -f "$HOME/.config/chromium/NativeMessagingHosts/com.innergy.mailer.json"
+# (repeat for other browsers if you use them)
+rm -rf "$HOME/.local/share/InnerCider"   # host, venv, and cached Graph token
 ```
 
 Then remove the extension from `chrome://extensions`.

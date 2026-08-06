@@ -280,7 +280,9 @@ def draft_email(attachments, subject, body, to, app, client_id=None):
     if not existing:
         raise FileNotFoundError(f"No attachment files found on disk: {attachments!r}")
 
-    if app == "outlook_new":
+    # "outlook_web" is the Linux label for the same Graph route; accept it so a
+    # settings value carried over from a Linux box doesn't fall through to COM.
+    if app in ("outlook_new", "outlook_web"):
         if not client_id:
             raise ValueError(
                 "Azure App Client ID is required for New Outlook. "

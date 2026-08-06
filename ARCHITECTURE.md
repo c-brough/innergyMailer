@@ -79,9 +79,17 @@ per-feature isolation on both sides without introducing a build step.
 
 ## The native host
 
-`native-host/innergy_mailer_host.py` (macOS, AppleScript via `osascript`) and
-`innergy_mailer_host_win.py` (Windows, Outlook COM or Microsoft Graph) are
-separate processes launched by Chrome via native messaging. The host's
+`native-host/innergy_mailer_host.py` (macOS, AppleScript via `osascript`),
+`innergy_mailer_host_win.py` (Windows, Outlook COM or Microsoft Graph), and
+`innergy_mailer_host_linux.py` (Linux, Microsoft Graph or `xdg-email`) are
+separate processes launched by Chrome via native messaging. They share the
+message framing, the `{ok, error}` reply shape, and the Graph device-code
+actions (`auth_start` / `auth_complete`), but not code — each is standalone so
+an installer only ever has to place one file. The Linux host adds one wrinkle:
+it returns an `openUrl` in its reply instead of launching a browser, because a
+host spawned by Chromium has no reliable claim on `DISPLAY`. `draft-email.js`
+and `graph-auth.js` open that URL with `chrome.tabs.create()`; the other two
+hosts omit the field, so the call stays a no-op there. The host's
 registered name, `com.innergy.mailer`, and the extension's manifest `key`
 (which pins a stable extension ID) are both left unchanged from the original
 "Innergy Mailer" naming — every existing install's native-messaging manifest

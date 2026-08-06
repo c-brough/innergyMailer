@@ -1,33 +1,48 @@
 /* Options page logic */
 
-const isWindows = navigator.userAgent.includes("Windows");
+const ua = navigator.userAgent;
+const isWindows = ua.includes("Windows");
+// Raspberry Pi OS Chromium reports "X11; Linux aarch64" (or armv7l). Android and
+// ChromeOS also carry "Linux" but have neither Linux route available, so exclude
+// them. macOS UA carries neither token, so it falls through to the mac branch.
+const isLinux = !isWindows && /Linux|X11/.test(ua) && !/Android|CrOS/.test(ua);
+const currentOs = isWindows ? "win" : isLinux ? "linux" : "mac";
 
 // Gray out options that don't apply to the current OS.
-const macIds = ["opt-mail", "opt-outlook-mac"];
-const winIds = ["opt-outlook-classic", "opt-outlook-new"];
+const OS_OPTION_IDS = {
+  mac: ["opt-mail", "opt-outlook-mac"],
+  win: ["opt-outlook-classic", "opt-outlook-new"],
+  linux: ["opt-outlook-web", "opt-linux-mail"],
+};
 
-(isWindows ? macIds : winIds).forEach((id) => {
-  const label = document.getElementById(id);
-  label.classList.add("disabled");
-  label.querySelector("input").disabled = true;
+Object.entries(OS_OPTION_IDS).forEach(([os, ids]) => {
+  if (os === currentOs) return;
+  ids.forEach((id) => {
+    const label = document.getElementById(id);
+    label.classList.add("disabled");
+    label.querySelector("input").disabled = true;
+  });
 });
 
+// Both New Outlook (Windows) and Outlook on the web (Linux) draft through the
+// Microsoft Graph API, so both need the Azure Client ID + device-code sign-in.
+// "outlook_new" is kept as-is rather than renamed: existing Windows installs
+// already have that value saved in chrome.storage.local.
+const GRAPH_APPS = ["outlook_new", "outlook_web"];
+
 // Show/hide the Graph API setup panel based on selected app.
-const graphSetup = document.getElementById("graph-setup");
+const graphFieldset = document.getElementById("fs-graph");
 function updateGraphVisibility(value) {
-  const isNew = value === "outlook_new";
-  graphSetup.style.display = isNew ? "block" : "none";
-  if (!isNew) {
+  const needsGraph = GRAPH_APPS.includes(value);
+  graphFieldset.style.display = needsGraph ? "block" : "none";
+  if (!needsGraph) {
     document.getElementById("graph-help").style.display = "none";
-    const btn = document.getElementById("graph-help-btn");
-    btn.style.background = "";
-    btn.style.borderColor = "";
-    btn.style.color = "";
+    resetHelpButtons();
   }
 }
 
 // Sensible per-OS default if nothing is saved.
-const DEFAULT_APP = isWindows ? "outlook_classic" : "mail";
+const DEFAULT_APP = { win: "outlook_classic", linux: "outlook_web", mac: "mail" }[currentOs];
 
 // Load saved settings.
 chrome.storage.local.get(["mailApp", "azureClientId", "graphAuthed", "bomBaseUrl"], (data) => {
@@ -40,8 +55,14 @@ chrome.storage.local.get(["mailApp", "azureClientId", "graphAuthed", "bomBaseUrl
   if (input && !input.disabled) {
     input.checked = true;
   } else {
+    // The saved value belongs to another OS (a copied profile, or a settings
+    // export). Persist the correction, don't just repaint the radio: sendToHost
+    // reads chrome.storage.local directly, and a stale-but-truthy value there
+    // skips its own OS default — so the host would be handed e.g. "mail" on
+    // Linux and reject it while this page claims a valid option is selected.
     const fallback = document.querySelector(`input[name="mailApp"][value="${DEFAULT_APP}"]`);
     if (fallback) fallback.checked = true;
+    chrome.storage.local.set({ mailApp: DEFAULT_APP });
   }
   updateGraphVisibility(input && !input.disabled ? value : DEFAULT_APP);
 
@@ -107,16 +128,34 @@ document.getElementById("bom-base-url").addEventListener("input", (e) => {
   }, 600);
 });
 
-// Help button -- toggles Azure setup instructions.
-document.getElementById("graph-help-btn").addEventListener("click", (e) => {
-  e.stopPropagation();
-  const help = document.getElementById("graph-help");
-  const btn  = document.getElementById("graph-help-btn");
-  const open = help.style.display === "block";
-  help.style.display = open ? "none" : "block";
-  btn.style.background = open ? "" : "#dde4ff";
-  btn.style.borderColor = open ? "" : "#8899ee";
-  btn.style.color = open ? "" : "#1a56db";
+// Help buttons -- one per Graph-backed option (Windows + Linux), both toggling
+// the same shared Azure setup instructions.
+const helpButtons = document.querySelectorAll(".graph-help-btn");
+
+// Queries fresh rather than closing over `helpButtons`: updateGraphVisibility
+// calls this and is defined above that const, so closing over it would risk a
+// temporal-dead-zone error if the call order ever changes.
+function resetHelpButtons() {
+  document.querySelectorAll(".graph-help-btn").forEach((btn) => {
+    btn.style.background = "";
+    btn.style.borderColor = "";
+    btn.style.color = "";
+  });
+}
+
+helpButtons.forEach((btn) => {
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const help = document.getElementById("graph-help");
+    const open = help.style.display === "block";
+    help.style.display = open ? "none" : "block";
+    resetHelpButtons();
+    if (!open) {
+      btn.style.background = "#dde4ff";
+      btn.style.borderColor = "#8899ee";
+      btn.style.color = "#1a56db";
+    }
+  });
 });
 
 // Watch storage for the user code written by background.js during the device flow.
@@ -130,7 +169,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     el.className = "inf";
     el.innerHTML =
       "Enter code &nbsp;<strong style=\"font-size:15px;letter-spacing:2px\">" + code + "</strong>&nbsp; " +
-      "at <a href=\"" + uri + "\" target=\"_blank\">" + uri + "</a> in Edge, then wait here...";
+      "at <a href=\"" + uri + "\" target=\"_blank\">" + uri + "</a>, then wait here...";
   }
 });
 
