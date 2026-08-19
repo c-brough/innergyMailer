@@ -41,10 +41,17 @@ array, **before** `content/bootstrap.js` (which must stay last) and **after**
 `content/core.js` (which must stay first). Order between feature files
 doesn't matter.
 
-If you need Innergy PO/file data, use `IC.innergy.*` rather than writing your
-own `fetch`. If your feature needs something the shared layer doesn't have
-yet, add it to `content/core.js`'s `innergy` object so the next feature can
-reuse it too.
+Entry `content_scripts[0]` is the isolated world, and that's where features
+belong. Entry `[1]` exists only for `content/features/export-capture-main.js`,
+which runs in the page's MAIN world because it has to patch the page's own
+`window.open` — it shares a global scope with Innergy's bundle and can't see
+`window.InnerCider`. Don't add anything there without that same forcing reason.
+
+If you need Innergy data — a PO's files, a work order's number and project, an
+employee group's members — use `IC.innergy.*` rather than writing your own
+`fetch`. If your feature needs something the shared layer doesn't have yet, add
+it to `content/core.js`'s `innergy` object (there's a generic `runQuery` to
+build on) so the next feature can reuse it too.
 
 ## 2. Background feature (only if you need privileged APIs)
 
