@@ -1,10 +1,20 @@
-/* InnerCider — Draft PO Email feature
+/* InnerCider — Draft Email feature (purchase orders and work orders)
  *
  * Injects a "Draft Email w/ PDF" button immediately to the LEFT of the
- * existing "Export Custom PDF" button on an Innergy purchase-order page.
+ * existing "Export Custom PDF" button, which Innergy renders on both
+ * purchase-order and work-order pages.
+ *
+ * The two document types differ in where the draft's contents come from:
+ *   • purchase order — subject/body/recipient scraped from the page (PO number,
+ *     vendor, vendor contact email, Materials grid), and the PO's own file
+ *     attachments offered for inclusion.
+ *   • work order — subject/body from Innergy's own WorkOrder/Project queries
+ *     rather than the DOM, and recipients from the shared employee group named
+ *     by WO_RECIPIENT_GROUP below. A WO page has no vendor and no Materials
+ *     grid, so the PO scrapers would produce nonsense there.
  *
  * When clicked it:
- *   1. Scrapes the PO number, vendor name, and a summary of the Materials grid.
+ *   1. Builds subject/body/recipients for whichever document type this is.
  *   2. Asks the background worker to start watching for the next download.
  *   3. Arms the MAIN-world window.open hook (see export-capture-main.js).
  *   4. Clicks the real "Export Custom PDF" button.
@@ -133,6 +143,42 @@
     return `${header}\n${lines.join("\n")}`;
   }
 
+  // ---- Work orders --------------------------------------------------------------
+
+  // The shared recipient list for work-order emails is the membership of this
+  // Innergy employee group (Human Resources → Employee Groups). It's a constant
+  // rather than a per-user setting on purpose: everyone's extension must read
+  // the same list, and membership is edited centrally in Innergy, so the list
+  // changes for everybody without anyone touching the extension. Only a rename
+  // of the group itself needs a change here.
+  const WO_RECIPIENT_GROUP = "Work Order Email List";
+
+  async function buildWorkOrderDraft() {
+    const info = await IC.innergy.fetchWorkOrderInfo();
+    if (!info) return null;
+
+    const title = [info.number, info.name].filter(Boolean).join(" - ") || "Work Order";
+    const project = [info.projectNumber, info.projectName].filter(Boolean).join(" ");
+    const url =
+      `https://app.innergy.com/#/projects/${info.projectId}` +
+      `/workOrder/${info.workOrderId}/details`;
+
+    const body =
+      `${title}\n` +
+      (project ? `Project: ${project}\n` : "") +
+      `\n${url}\n`;
+
+    const recipients = await IC.innergy.fetchEmployeeGroupEmails(WO_RECIPIENT_GROUP);
+    if (!recipients.length) {
+      IC.warn(
+        `No active members with an email address in the "${WO_RECIPIENT_GROUP}" ` +
+          "employee group; drafting without recipients."
+      );
+    }
+
+    return { subject: title, body, recipients, docNumber: info.number || "WO" };
+  }
+
   // Decide which files to attach from the innergyEmailAttach flag:
   //   yes -> attach, no -> skip, anything else -> ask the user.
   function categorizeFiles(files) {
@@ -213,6 +259,45 @@
       return;
     }
 
+    const me = ev.currentTarget;
+    const original = me.textContent;
+    me.disabled = true;
+
+    const resetButton = () => {
+      me.textContent = original;
+      me.disabled = false;
+    };
+
+    // Work orders take everything from Innergy's own queries and the shared
+    // employee group, and have no PO-style file attachments to offer.
+    if (IC.innergy.getWorkOrderIds()) {
+      me.textContent = "Preparing…";
+      const wo = await buildWorkOrderDraft();
+      if (!wo) {
+        resetButton();
+        alert("InnerCider: couldn't read this work order from Innergy.");
+        return;
+      }
+      IC.log("work order draft", {
+        subject: wo.subject,
+        recipients: wo.recipients.length,
+        group: WO_RECIPIENT_GROUP,
+      });
+      startDraft(
+        {
+          exportBtn,
+          subject: wo.subject,
+          body: wo.body,
+          recipients: wo.recipients,
+          docNumber: wo.docNumber,
+          me,
+          original,
+        },
+        []
+      );
+      return;
+    }
+
     const poNumber = getPoNumber();
     const vendor = getVendorName();
     const to = getVendorContactEmail();
@@ -227,17 +312,17 @@
       IC.warn("No vendor contact email found; drafting without a recipient.");
     }
 
-    const me = ev.currentTarget;
-    const original = me.textContent;
     me.textContent = "Checking files…";
-    me.disabled = true;
 
-    const resetButton = () => {
-      me.textContent = original;
-      me.disabled = false;
+    const draftContext = {
+      exportBtn,
+      subject,
+      body,
+      recipients: to ? [to] : [],
+      docNumber: poNumber,
+      me,
+      original,
     };
-
-    const draftContext = { exportBtn, subject, body, to, poNumber, me, original };
 
     // Collect files attached to the PO and decide per the innergyEmailAttach flag.
     const files = await IC.innergy.fetchPoFiles();
@@ -263,9 +348,10 @@
   }
 
   // Arm the background watcher and trigger the real export. `files` is the final
-  // list of { name, url } to attach alongside the exported PDF.
+  // list of { name, url } to attach alongside the exported PDF (always empty for
+  // work orders, which have no PO-style attachment picker).
   function startDraft(ctx, files) {
-    const { exportBtn, subject, body, to, poNumber, me, original } = ctx;
+    const { exportBtn, subject, body, recipients, docNumber, me, original } = ctx;
     me.textContent = "Exporting…";
     me.disabled = true;
 
@@ -274,8 +360,13 @@
     armExportCapture();
 
     const payload = files.map((f) => ({ name: f.name, url: f.url }));
-    const msg = { type: "EXPORT_AND_MAIL", subject, body, to, poNumber, files: payload };
-    IC.log("click → arming", { poNumber, to, subject, files: payload.length });
+    const msg = { type: "EXPORT_AND_MAIL", subject, body, recipients, docNumber, files: payload };
+    IC.log("click → arming", {
+      docNumber,
+      recipients: recipients.length,
+      subject,
+      files: payload.length,
+    });
     chrome.runtime.sendMessage(msg, (resp) => {
       IC.log("arm response:", resp);
       if (chrome.runtime.lastError || !resp || !resp.armed) {

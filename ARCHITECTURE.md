@@ -28,9 +28,11 @@ Instead, `manifest.json` lists ordered files that all attach to one global,
 `window.InnerCider`:
 
 1. **`content/core.js`** — loaded first. Defines `window.InnerCider`: a
-   logger (`log`/`warn`), the shared Innergy access layer (`innergy.getPoId`,
-   `innergy.fetchPoFiles` — the authenticated `query/run` API client), and a
-   feature registry (`registerFeature`, `_features`).
+   logger (`log`/`warn`), the shared Innergy access layer (the authenticated
+   `query/run` API client, plus `innergy.getPoId`, `innergy.getWorkOrderIds`,
+   `innergy.fetchPoFiles`, `innergy.fetchWorkOrderInfo`,
+   `innergy.fetchEmployeeGroupEmails`), and a feature registry
+   (`registerFeature`, `_features`).
 2. **`content/features/*.js`** — one file per feature. Each is a self-contained
    IIFE that reads `window.InnerCider`, does its own DOM scraping/injection,
    and finishes by calling `IC.registerFeature({ id, mount })`. `mount()` must
@@ -87,6 +89,22 @@ module-loading option without a bundler; the background service worker does.
 Using real modules where they're free (background) and the standard
 ordered-globals fallback where they're not (content) gets the same
 per-feature isolation on both sides without introducing a build step.
+
+## Configuration that must be the same for everyone
+
+Work-order emails go to a fixed list of people that changes often. That list is
+not stored in the extension: it's the membership of an Innergy employee group
+(`WO_RECIPIENT_GROUP` in `content/features/draft-email.js`), read live via
+`EmployeeListQuery` on every click. Innergy is the natural home for it —
+everyone running the extension is already authenticated there, the extension
+already holds that host permission, and the list can be edited by someone who
+has never seen this repo.
+
+The *group name* is a constant rather than an options-page setting on purpose.
+A per-user setting would let installs drift onto different lists, which is the
+opposite of what shared configuration is for. The general rule: settings that
+must agree across installs belong in Innergy; settings that are genuinely
+per-user (which mail app, the BOM app's address) belong in the options page.
 
 ## The native host
 

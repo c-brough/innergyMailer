@@ -37,12 +37,12 @@ function isPdf(item) {
   return !!item.filename && /\.pdf$/i.test(item.filename);
 }
 
-// Best-effort log detail: did the filename include the exact PO number?
-// (Innergy's export names it e.g. PO-100005_INNERGYDefault_….pdf, but a report
-// layout could name it otherwise — informational only, never a gate.)
-function filenameContainsPo(poNumber, path) {
-  if (!path || !poNumber) return false;
-  const escaped = String(poNumber).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// Best-effort log detail: did the filename include the exact PO / work-order
+// number? (Innergy's export names it e.g. PO-100005_INNERGYDefault_….pdf, but a
+// report layout could name it otherwise — informational only, never a gate.)
+function filenameContainsDocNumber(docNumber, path) {
+  if (!path || !docNumber) return false;
+  const escaped = String(docNumber).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(escaped + "(?!\\d)", "i").test(path.split(/[\\/]/).pop());
 }
 
@@ -51,14 +51,14 @@ export function handleExportAndMail(msg, sender, sendResponse) {
   setPending({
     subject: msg.subject,
     body: msg.body,
-    to: msg.to || "",
-    poNumber: msg.poNumber || "",
+    recipients: Array.isArray(msg.recipients) ? msg.recipients : [],
+    docNumber: msg.docNumber || "",
     files: Array.isArray(msg.files) ? msg.files : [],
     tabId: sender.tab ? sender.tab.id : null,
     ts: Date.now(),
   })
     .then(() => {
-      dbg("armed for PO", msg.poNumber);
+      dbg("armed for", msg.docNumber);
       sendResponse({ armed: true });
     })
     .catch((e) => {
@@ -89,7 +89,7 @@ export async function handleCompletedDownload(downloadId) {
     path,
     mime: item && item.mime,
     startTime: item && item.startTime,
-    expectedPo: pending.poNumber,
+    expectedDoc: pending.docNumber,
   });
 
   if (!isPdf(item)) {
@@ -104,9 +104,9 @@ export async function handleCompletedDownload(downloadId) {
 
   await clearPending();
   dbg(
-    filenameContainsPo(pending.poNumber, path)
-      ? "matched PDF (filename contains PO)"
-      : "matched PDF (export download after click; GUID filename)",
+    filenameContainsDocNumber(pending.docNumber, path)
+      ? "matched PDF (filename contains the document number)"
+      : "matched PDF (export download after click)",
     path
   );
 
@@ -245,16 +245,22 @@ async function sendToHost(attachments, pending) {
     mailApp === "outlook_web"     ? "Outlook on the web" :
     mailApp === "linux_mail"      ? "Default mail client" :
                                     "Apple Mail";
+  // `toList` is the recipient list; `to` repeats its first address so a native
+  // host that predates multi-recipient support still drafts to someone real
+  // rather than choking on a joined string. Users update the extension and the
+  // host in two separate steps, so one being older than the other is normal.
+  const recipients = pending.recipients || [];
   const payload = {
     attachments,
     pdfPath: attachments[0],
     subject: pending.subject,
     body: pending.body,
-    to: pending.to,
+    toList: recipients,
+    to: recipients[0] || "",
     app: mailApp,
     clientId: stored.azureClientId || "",
   };
-  dbg("calling sendNativeMessage", { app: mailApp, attachments });
+  dbg("calling sendNativeMessage", { app: mailApp, attachments, recipients: recipients.length });
   const response = await sendNative(payload);
   if (response.transportError) {
     dbg("native host error", response.error);

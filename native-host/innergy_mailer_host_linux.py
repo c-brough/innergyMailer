@@ -34,6 +34,7 @@ to host.log beside this script, never to stdout.
 
 import json
 import os
+import re
 import shutil
 import struct
 import subprocess
@@ -160,7 +161,29 @@ def _graph_token(client_id):
     )
 
 
-def _graph_draft(subject, body, to, attachments, client_id):
+def recipients_from(msg):
+    """The draft's recipients, newest wire format first.
+
+    `toList` is the list the extension sends today. `to` is the single-address
+    field it sent before multi-recipient support; it is still populated (with
+    the first address) so an older host keeps working, and is read here so a
+    newer host keeps working with an older extension. The extension and the
+    native host are updated by two separate acts — reloading the unpacked
+    extension, and re-running the installer — so either can be the stale one.
+    """
+    raw = msg.get("toList")
+    if not isinstance(raw, list):
+        raw = re.split(r"[,;]", msg.get("to") or "")
+    out, seen = [], set()
+    for addr in raw:
+        addr = (addr or "").strip()
+        if addr and addr.lower() not in seen:
+            seen.add(addr.lower())
+            out.append(addr)
+    return out
+
+
+def _graph_draft(subject, body, recipients, attachments, client_id):
     """Create a draft via Microsoft Graph; return the webLink for the extension."""
     requests = _import_requests()
     import base64
@@ -173,8 +196,8 @@ def _graph_draft(subject, body, to, attachments, client_id):
         "body": {"contentType": "Text", "content": body or ""},
         "isDraft": True,
     }
-    if to:
-        draft_body["toRecipients"] = [{"emailAddress": {"address": to}}]
+    if recipients:
+        draft_body["toRecipients"] = [{"emailAddress": {"address": a}} for a in recipients]
 
     r = requests.post(
         "https://graph.microsoft.com/v1.0/me/messages", headers=hdrs, json=draft_body
@@ -269,7 +292,7 @@ def _mailto_handler():
     return r.stdout.strip() if r.returncode == 0 else ""
 
 
-def _xdg_email_draft(subject, body, to, attachments):
+def _xdg_email_draft(subject, body, recipients, attachments):
     """Open a compose window in the desktop mail client via xdg-email.
 
     Refuses when no mailto: handler is registered. Without one, xdg-email falls
@@ -297,8 +320,8 @@ def _xdg_email_draft(subject, body, to, attachments):
         cmd += ["--body", body]
     for path in attachments:
         cmd += ["--attach", os.path.abspath(path)]
-    if to:
-        cmd.append(to)
+    # xdg-email takes any number of trailing addresses.
+    cmd += recipients or []
 
     proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     # Some handlers return immediately, others stay attached to the compose
@@ -319,7 +342,7 @@ def _xdg_email_draft(subject, body, to, attachments):
 
 # --------------------------------------------------------------------- dispatch
 
-def draft_email(attachments, subject, body, to, app, client_id=None):
+def draft_email(attachments, subject, body, recipients, app, client_id=None):
     existing = [p for p in (attachments or []) if p and os.path.exists(p)]
     missing = [p for p in (attachments or []) if p and not os.path.exists(p)]
     for p in missing:
@@ -335,10 +358,10 @@ def draft_email(attachments, subject, body, to, app, client_id=None):
                 "Azure App Client ID is required for Outlook on the web. Open the "
                 "InnerCider Options and paste your Client ID."
             )
-        return _graph_draft(subject, body, to, existing, client_id)
+        return _graph_draft(subject, body, recipients, existing, client_id)
 
     if app in XDG_APPS:
-        return _xdg_email_draft(subject, body, to, existing)
+        return _xdg_email_draft(subject, body, recipients, existing)
 
     raise ValueError(
         f"Mail app {app!r} is not available on Linux. Open the InnerCider Options "
@@ -433,15 +456,16 @@ def main():
         attachments = msg.get("attachments")
         if not attachments:
             attachments = [msg.get("pdfPath")] if msg.get("pdfPath") else []
+        recipients = recipients_from(msg)
         log(
-            f"received: app={msg.get('app')!r} to={msg.get('to')!r} "
+            f"received: app={msg.get('app')!r} to={recipients!r} "
             f"subject={msg.get('subject')!r} attachments={attachments!r}"
         )
         extra = draft_email(
             attachments,
             msg.get("subject"),
             msg.get("body"),
-            msg.get("to"),
+            recipients,
             msg.get("app", "outlook_web"),
             client_id=(msg.get("clientId") or "").strip() or None,
         )

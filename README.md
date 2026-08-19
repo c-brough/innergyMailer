@@ -2,8 +2,8 @@
 
 A Chrome extension (+ native helper) with three tools for Innergy:
 
-1. **Draft PO email** — a **”Draft Email w/ PDF”** button next to **Export Custom
-   PDF** on a purchase-order page (details below).
+1. **Draft PO / WO email** — a **”Draft Email w/ PDF”** button next to **Export
+   Custom PDF** on a purchase-order *or* work-order page (details below).
 2. **Materials total cost** — on the Materials grid, shows the total cost per
    **Default UoM** / **Purchasing UoM** next to each value (unit `Cost` × the
    size’s conversion to the base unit, e.g. `$2.03/SF × 4'×8' = $64.96`).
@@ -24,6 +24,37 @@ purchase-order page. Clicking it:
    - **Body** = a brief summary of the line items in the PO’s **Materials** grid.
 
 The draft is left **open and unsent** so you can review and send it yourself.
+
+## Draft WO email
+
+The same button appears on **work-order** pages, where Innergy renders the same
+**Export Custom PDF** control. A work order has no vendor and no Materials grid,
+so the draft is built from Innergy's own work-order data instead of the page:
+
+- **Subject** = `<WO#> - <WO name>` (e.g. `P-26-1084-001p - Test WO 1`)
+- **Body** = the WO number and name, its project, and a link back to the WO
+- **Recipients** = every active member of the **`Work Order Email List`**
+  employee group
+
+### Changing who receives WO emails
+
+The recipient list *is* that employee group's membership, so you change it in
+Innergy — no extension update, no reinstall, nothing to tell anyone:
+
+**Human Resources → Employee Groups → `Work Order Email List`** → add or remove
+employees.
+
+Every install reads the group live when the button is clicked, so a change takes
+effect on everyone's very next draft. Members with no email address, and anyone
+whose employee record isn't **Active**, are skipped automatically.
+
+The group *name* is a constant in `content/features/draft-email.js`
+(`WO_RECIPIENT_GROUP`) rather than a per-user setting, deliberately: everyone
+must read the same list. Renaming the group in Innergy is the one change that
+needs a code edit.
+
+Work-order drafts attach **only the exported PDF** — the WO **Files** tab is not
+offered the way a PO's attachments are.
 
 ## BOM backlinks
 
@@ -247,13 +278,19 @@ Arm64 and armv7l are fine — nothing here needs a compiled wheel.
   - vendor from the **Vendor (Company - Office)** label’s linked value,
   - materials from the **Materials** `[role=”grid”]` (Material Name, UoM,
     Quantity Ordered, Extended Cost).
-- It tells **background/features/draft-email.js** to arm a download watcher,
-  then clicks the real export button.
-- Innergy names the exported file with a random GUID (e.g. `6448ef99-….pdf`), so
-  there is no PO number in the filename to validate against. The background
-  feature therefore captures the first download that **completes after the
-  click** and is a PDF (by MIME or `.pdf` extension); downloads that began
-  before the click are rejected.
+  On a **work-order** page it skips all of that scraping and asks Innergy
+  directly (`WorkOrderNumberAndNameQuery`, `ProjectNumberAndNameQuery`,
+  `EmployeeListQuery` for the recipient group).
+- It tells **background/features/draft-email.js** to arm, arms the MAIN-world
+  `window.open` hook, then clicks the real export button.
+- Innergy's export ends in `window.open(<pdf url>)` — an Azure blob URL with a
+  SAS token, plain GET, no `Content-Disposition`. **content/features/export-capture-main.js**
+  catches that call while armed, hands the URL to the background worker and
+  swallows the popup; the worker fetches it with `chrome.downloads.download()`.
+  That is what makes the feature work under either Chrome PDF setting — “Open
+  PDFs in Chrome” never produces a download to watch for, which is also the
+  setting Innergy label printing needs. The old download watcher remains as a
+  fallback for the case where the hook misses the export entirely.
 - It also fetches the PO’s **Files tab** attachments via the same API the app
   uses (`PurchaseOrderAttachmentsQuery`). Each file’s **`innergyEmailAttach`**
   custom field decides what happens:
@@ -262,8 +299,10 @@ Arm64 and armv7l are fine — nothing here needs a compiled wheel.
   - **empty/unset** → the extension shows a checkbox dialog so you can pick which
     of those files to include (the export only runs after you confirm).
   Selected files are downloaded and attached alongside the PDF. It then sends
-  `{attachments, subject, body, to, app}` to the native host, which attaches every
-  file to the draft.
+  `{attachments, subject, body, toList, to, app}` to the native host, which
+  attaches every file to the draft. `toList` is the recipient list; `to` repeats
+  its first address so a native host installed before multi-recipient support
+  still drafts to someone real.
 - **macOS**: `innergy_mailer_host.py` runs AppleScript via `osascript`.
 - **Windows**: `innergy_mailer_host_win.py` uses `win32com.client` to drive
   `Outlook.Application` COM automation.

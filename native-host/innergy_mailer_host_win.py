@@ -7,7 +7,7 @@ leaves the draft open and unsent for review.
 
 Requires: pip install pywin32
 
-Message in:  {"attachments": [...], "subject": "...", "body": "...", "to": "...",
+Message in:  {"attachments": [...], "subject": "...", "body": "...", "toList": [...],
               "app": "outlook"}
 Message out: {"ok": true} or {"ok": false, "error": "..."}
 
@@ -17,6 +17,7 @@ to host.log beside this script, never to stdout.
 
 import json
 import os
+import re
 import struct
 import sys
 import traceback
@@ -142,7 +143,29 @@ def _mapi_send(subject, body, to, attachments):
         raise RuntimeError(f"MAPISendMail returned error code {rc}")
 
 
-def _graph_draft(subject, body, to, attachments, client_id):
+def recipients_from(msg):
+    """The draft's recipients, newest wire format first.
+
+    `toList` is the list the extension sends today. `to` is the single-address
+    field it sent before multi-recipient support; it is still populated (with
+    the first address) so an older host keeps working, and is read here so a
+    newer host keeps working with an older extension. The extension and the
+    native host are updated by two separate acts — reloading the unpacked
+    extension, and re-running the installer — so either can be the stale one.
+    """
+    raw = msg.get("toList")
+    if not isinstance(raw, list):
+        raw = re.split(r"[,;]", msg.get("to") or "")
+    out, seen = [], set()
+    for addr in raw:
+        addr = (addr or "").strip()
+        if addr and addr.lower() not in seen:
+            seen.add(addr.lower())
+            out.append(addr)
+    return out
+
+
+def _graph_draft(subject, body, recipients, attachments, client_id):
     """Create a draft via Microsoft Graph API and open it in New Outlook."""
     import msal
     import requests
@@ -195,8 +218,8 @@ def _graph_draft(subject, body, to, attachments, client_id):
         "body": {"contentType": "Text", "content": body or ""},
         "isDraft": True,
     }
-    if to:
-        draft_body["toRecipients"] = [{"emailAddress": {"address": to}}]
+    if recipients:
+        draft_body["toRecipients"] = [{"emailAddress": {"address": a}} for a in recipients]
 
     r = requests.post("https://graph.microsoft.com/v1.0/me/messages", headers=hdrs, json=draft_body)
     r.raise_for_status()
@@ -272,7 +295,7 @@ def _graph_draft(subject, body, to, attachments, client_id):
         log("WARNING: no webLink returned for draft")
 
 
-def draft_email(attachments, subject, body, to, app, client_id=None):
+def draft_email(attachments, subject, body, recipients, app, client_id=None):
     existing = [p for p in (attachments or []) if p and os.path.exists(p)]
     missing  = [p for p in (attachments or []) if p and not os.path.exists(p)]
     for p in missing:
@@ -288,7 +311,7 @@ def draft_email(attachments, subject, body, to, app, client_id=None):
                 "Azure App Client ID is required for New Outlook. "
                 "Open the extension Options and paste your Client ID."
             )
-        _graph_draft(subject, body, to, existing, client_id)
+        _graph_draft(subject, body, recipients, existing, client_id)
         return None
 
     # Outlook Classic — COM automation.
@@ -308,8 +331,9 @@ def draft_email(attachments, subject, body, to, app, client_id=None):
     mail = outlook.CreateItem(0)  # 0 = olMailItem
     mail.Subject = subject or ""
     mail.Body    = body or ""
-    if to:
-        mail.To = to
+    if recipients:
+        # Outlook Classic parses a semicolon-delimited recipient string.
+        mail.To = "; ".join(recipients)
     for path in existing:
         mail.Attachments.Add(os.path.abspath(path))
     mail.Display(False)
@@ -446,15 +470,16 @@ def main():
         attachments = msg.get("attachments")
         if not attachments:
             attachments = [msg.get("pdfPath")] if msg.get("pdfPath") else []
+        recipients = recipients_from(msg)
         log(
-            f"received: app={msg.get('app')!r} to={msg.get('to')!r} "
+            f"received: app={msg.get('app')!r} to={recipients!r} "
             f"subject={msg.get('subject')!r} attachments={attachments!r}"
         )
         note = draft_email(
             attachments,
             msg.get("subject"),
             msg.get("body"),
-            msg.get("to"),
+            recipients,
             msg.get("app", "outlook_classic"),
             client_id=msg.get("clientId", "").strip() or None,
         )
