@@ -40,6 +40,17 @@ Instead, `manifest.json` lists ordered files that all attach to one global,
    navigates) that calls every registered feature's `mount()` on every DOM
    change, plus once at load.
 
+One file sits outside this pattern: **`content/features/export-capture-main.js`**
+runs in the page's MAIN world (a second `content_scripts` entry, `"world":
+"MAIN"`, `document_start`) because it patches `window.open` — the page's own
+`window`, which an isolated content script can't reach. It has no access to
+`window.InnerCider` for the same reason, so it stays deliberately tiny: while
+armed, capture the export PDF's URL, post it to the isolated world, suppress
+the popup; unarmed, pass every call straight through. `draft-email.js` holds
+the other end of that `window.postMessage` bridge. Prefer the isolated world
+for anything new — MAIN-world code shares a global scope with Innergy's own
+bundle and can break the app.
+
 This ordered-globals pattern is the plain-JS equivalent of ES module imports:
 each feature's file boundary is real, but wiring happens through the shared
 namespace instead of `import`/`export`. It converts to real modules 1:1

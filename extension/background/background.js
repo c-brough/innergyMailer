@@ -12,11 +12,16 @@
  */
 
 import { dbg, setDebugTab } from "./shared/log.js";
-import { handleExportAndMail, handleCompletedDownload } from "./features/draft-email.js";
+import {
+  handleExportAndMail,
+  handleExportPdfUrl,
+  handleCompletedDownload,
+} from "./features/draft-email.js";
 import { handleGraphAuth } from "./features/graph-auth.js";
 
 const handlers = {
   EXPORT_AND_MAIL: handleExportAndMail,
+  EXPORT_PDF_URL: handleExportPdfUrl,
   GRAPH_AUTH: handleGraphAuth,
 };
 

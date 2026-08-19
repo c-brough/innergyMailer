@@ -6,9 +6,14 @@
  * When clicked it:
  *   1. Scrapes the PO number, vendor name, and a summary of the Materials grid.
  *   2. Asks the background worker to start watching for the next download.
- *   3. Clicks the real "Export Custom PDF" button.
- * The background worker then hands the downloaded PDF + subject/body to the
- * native messaging host, which creates the Mail draft.
+ *   3. Arms the MAIN-world window.open hook (see export-capture-main.js).
+ *   4. Clicks the real "Export Custom PDF" button.
+ * Innergy's export ends in window.open(<pdf url>); the hook hands that URL
+ * back here and we forward it to the background worker, which downloads it
+ * and passes the file + subject/body to the native messaging host, which
+ * creates the Mail draft. The URL path is what makes this work whether the
+ * user's Chrome PDF setting is "download" or "open in Chrome" — the download
+ * watcher only ever fires under the former.
  */
 
 (() => {
@@ -141,6 +146,39 @@
     return { include, undecided };
   }
 
+  // ---- MAIN-world bridge -------------------------------------------------------
+  // export-capture-main.js patches window.open inside the page's own world and
+  // posts the export PDF's URL back here. See that file for why it has to live
+  // there. We keep our own arm window rather than trusting the message: it
+  // arrives over window.postMessage, which the page itself could send, so this
+  // only ever relays a URL we asked for and only while we're expecting one.
+  // Mirrors the hook's own timeout — an export that never fires disarms both.
+
+  const CAPTURE_TIMEOUT_MS = 60_000;
+  let captureArmedUntil = 0;
+
+  function armExportCapture() {
+    captureArmedUntil = Date.now() + CAPTURE_TIMEOUT_MS;
+    window.postMessage({ source: "innercider", type: "ARM_EXPORT_CAPTURE" }, location.origin);
+  }
+
+  function disarmExportCapture() {
+    captureArmedUntil = 0;
+    window.postMessage({ source: "innercider", type: "DISARM_EXPORT_CAPTURE" }, location.origin);
+  }
+
+  window.addEventListener("message", (ev) => {
+    if (ev.source !== window) return;
+    const msg = ev.data;
+    if (!msg || msg.source !== "innercider-main" || msg.type !== "EXPORT_PDF_URL") return;
+    if (Date.now() >= captureArmedUntil) return;
+    captureArmedUntil = 0;
+    IC.log("captured export PDF url", msg.url);
+    chrome.runtime.sendMessage({ type: "EXPORT_PDF_URL", url: msg.url }, () => {
+      void chrome.runtime.lastError; // worker may have restarted; background re-checks state
+    });
+  });
+
   // ---- Button injection -------------------------------------------------------
 
   function makeButton(exportBtn) {
@@ -231,12 +269,17 @@
     me.textContent = "Exporting…";
     me.disabled = true;
 
+    // Arm the window.open hook first: the background round-trip below gives the
+    // MAIN world's message listener time to run before the export can fire.
+    armExportCapture();
+
     const payload = files.map((f) => ({ name: f.name, url: f.url }));
     const msg = { type: "EXPORT_AND_MAIL", subject, body, to, poNumber, files: payload };
     IC.log("click → arming", { poNumber, to, subject, files: payload.length });
     chrome.runtime.sendMessage(msg, (resp) => {
       IC.log("arm response:", resp);
       if (chrome.runtime.lastError || !resp || !resp.armed) {
+        disarmExportCapture();
         me.textContent = original;
         me.disabled = false;
         alert(

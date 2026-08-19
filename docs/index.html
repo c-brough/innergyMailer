@@ -45,7 +45,9 @@
       the developer or any third-party analytics or advertising service.</li>
     <li><strong>Innergy:</strong> the extension communicates only with your own
       Innergy account at <code>app.innergy.com</code> to read the purchase order
-      you are viewing and its attachments.</li>
+      you are viewing and its attachments, and with the Innergy-hosted report
+      storage link that Innergy's own export hands it, to download the exported
+      PDF.</li>
     <li><strong>Your mail app:</strong> the draft details (subject, body,
       recipient, attachment file paths) are passed to a companion native helper
       you install, which creates the draft locally in Apple Mail or Outlook.</li>
@@ -63,7 +65,7 @@
 
   <h2>Permissions</h2>
   <ul>
-    <li><code>downloads</code> — detect the exported PDF and download selected
+    <li><code>downloads</code> — download the exported PDF and any selected
       PO attachments to your computer.</li>
     <li><code>nativeMessaging</code> — pass the draft to the local helper that
       creates it in your desktop mail app.</li>

@@ -1,9 +1,25 @@
 /* InnerCider — background: Draft PO Email feature
  *
- * Watches for the PDF that the content script triggers via "Export Custom
- * PDF", then forwards its on-disk path plus the email subject/body/recipient
- * to the native messaging host (com.innergy.mailer), which drafts the email
- * in the user's chosen mail app.
+ * Gets the PDF that the content script triggered via "Export Custom PDF" onto
+ * disk, then forwards its path plus the email subject/body/recipient to the
+ * native messaging host (com.innergy.mailer), which drafts the email in the
+ * user's chosen mail app.
+ *
+ * Two ways the PDF arrives, both ending in deliver():
+ *   • EXPORT_PDF_URL — the normal path. The content script's MAIN-world hook
+ *     caught Innergy's window.open(<pdf url>) and handed us the URL, so we
+ *     fetch it ourselves with chrome.downloads.download(). That works under
+ *     either Chrome PDF setting, because the "open PDFs in Chrome" preference
+ *     governs navigations, not the downloads API.
+ *   • downloads.onChanged — the original path, now only a fallback. It cannot
+ *     race the path above: a captured export is suppressed before it ever
+ *     reaches the network stack, so no download event exists to see. It fires
+ *     only if the hook misses the export entirely (Innergy switching away from
+ *     window.open, say) AND the user's setting is "download PDFs" — the one
+ *     combination that still produces a download on its own.
+ * Whichever runs claims the pending job by clearing it first, so the file
+ * downloads that follow (the PDF itself, then any PO attachments) find nothing
+ * pending and are ignored rather than re-entering the flow.
  */
 
 import { dbg, getDebugTab, setDebugTab } from "../shared/log.js";
@@ -12,18 +28,18 @@ import { sendNative } from "../shared/native.js";
 
 const ARM_TIMEOUT_MS = 120_000; // ignore stale arms older than this
 
-// Innergy names the exported file with a random GUID (e.g. 6448ef99-….pdf), so
-// we cannot validate it against the PO number in the filename. Instead we
-// accept the PDF that the export produced: the first download that completes
-// AFTER the button arm and is a PDF.
+// Fallback-path matching only (the EXPORT_PDF_URL path knows exactly which file
+// it fetched). A download event carries no link back to the click that caused
+// it, so we accept the first PDF that completes AFTER the button arm.
 function isPdf(item) {
   if (!item) return false;
   if (item.mime && /pdf/i.test(item.mime)) return true;
   return !!item.filename && /\.pdf$/i.test(item.filename);
 }
 
-// Best-effort: did the filename happen to include the exact PO number? (Usually
-// false for Innergy's GUID-named exports — informational only.)
+// Best-effort log detail: did the filename include the exact PO number?
+// (Innergy's export names it e.g. PO-100005_INNERGYDefault_….pdf, but a report
+// layout could name it otherwise — informational only, never a gate.)
 function filenameContainsPo(poNumber, path) {
   if (!path || !poNumber) return false;
   const escaped = String(poNumber).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -94,8 +110,58 @@ export async function handleCompletedDownload(downloadId) {
     path
   );
 
-  // Start with the exported PDF, then download any PO files and attach them too.
-  const attachments = [path];
+  await deliver(path, pending);
+}
+
+// chrome.runtime.onMessage handler for EXPORT_PDF_URL: the content script's
+// window.open hook caught the export's PDF URL, so download it directly rather
+// than waiting for a download event that only fires under one PDF setting.
+export async function handleExportPdfUrl(msg, sender, sendResponse) {
+  const pending = await getPending();
+  if (!pending) {
+    dbg("export URL arrived but NOT armed (no pending state)", { url: msg.url });
+    sendResponse({ ok: false });
+    return;
+  }
+  if (getDebugTab() == null) setDebugTab(pending.tabId); // worker may have restarted
+  if (Date.now() - pending.ts > ARM_TIMEOUT_MS) {
+    dbg("pending arm is stale; clearing");
+    await clearPending();
+    sendResponse({ ok: false });
+    return;
+  }
+  let url;
+  try {
+    url = new URL(msg.url);
+  } catch {
+    url = null;
+  }
+  if (!url || url.protocol !== "https:") {
+    dbg("ignored: export URL is not https", { url: msg.url });
+    sendResponse({ ok: false });
+    return;
+  }
+
+  // Claim the job before the slow part so the downloads watcher can't also run it.
+  await clearPending();
+  dbg("matched PDF (captured from window.open)", msg.url);
+  sendResponse({ ok: true });
+
+  try {
+    // No filename: Chrome derives it from the URL path, which already carries
+    // the PO / work-order number (e.g. PO-100005_INNERGYDefault_….pdf).
+    const path = await downloadAndWait(msg.url);
+    if (!path) throw new Error("download produced no file");
+    await deliver(path, pending);
+  } catch (e) {
+    dbg("exported PDF download failed", String(e));
+    report(pending.tabId, false, `Couldn't download the exported PDF: ${e.message || e}`);
+  }
+}
+
+// Attach any PO files alongside the exported PDF, then hand the lot to the host.
+async function deliver(pdfPath, pending) {
+  const attachments = [pdfPath];
   const files = pending.files || [];
   if (files.length) {
     dbg(`downloading ${files.length} PO file(s)`, files.map((f) => f.name));
