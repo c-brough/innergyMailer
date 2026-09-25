@@ -1,6 +1,6 @@
 /* InnerCider — MAIN-world capture of the exported PDF's URL
  *
- * Innergy's "Export Custom PDF" button (PO pages and work-order pages alike)
+ * Innergy's "Export Custom PDF" button on a purchase-order page
  * ends in a bare
  *   window.open("https://…blob.core.windows.net/…/PO-100005_….pdf?…&sig=…")
  * — an Azure blob URL with a SAS token, plain GET, no Content-Disposition.

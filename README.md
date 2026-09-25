@@ -2,8 +2,8 @@
 
 A Chrome extension (+ native helper) with three tools for Innergy:
 
-1. **Draft PO / WO email** — a **”Draft Email w/ PDF”** button next to **Export
-   Custom PDF** on a purchase-order *or* work-order page (details below).
+1. **Draft PO email** — a **”Draft Email w/ PDF”** button next to **Export
+   Custom PDF** on a purchase-order page (details below).
 2. **Materials total cost** — on the Materials grid, shows the total cost per
    **Default UoM** / **Purchasing UoM** next to each value (unit `Cost` × the
    size’s conversion to the base unit, e.g. `$2.03/SF × 4'×8' = $64.96`).
@@ -24,37 +24,6 @@ purchase-order page. Clicking it:
    - **Body** = a brief summary of the line items in the PO’s **Materials** grid.
 
 The draft is left **open and unsent** so you can review and send it yourself.
-
-## Draft WO email
-
-The same button appears on **work-order** pages, where Innergy renders the same
-**Export Custom PDF** control. A work order has no vendor and no Materials grid,
-so the draft is built from Innergy's own work-order data instead of the page:
-
-- **Subject** = `<WO#> - <WO name>` (e.g. `P-26-1084-001p - Test WO 1`)
-- **Body** = the WO number and name, its project, and a link back to the WO
-- **Recipients** = every active member of the **`Work Order Email List`**
-  employee group
-
-### Changing who receives WO emails
-
-The recipient list *is* that employee group's membership, so you change it in
-Innergy — no extension update, no reinstall, nothing to tell anyone:
-
-**Human Resources → Employee Groups → `Work Order Email List`** → add or remove
-employees.
-
-Every install reads the group live when the button is clicked, so a change takes
-effect on everyone's very next draft. Members with no email address, and anyone
-whose employee record isn't **Active**, are skipped automatically.
-
-The group *name* is a constant in `content/features/draft-email.js`
-(`WO_RECIPIENT_GROUP`) rather than a per-user setting, deliberately: everyone
-must read the same list. Renaming the group in Innergy is the one change that
-needs a code edit.
-
-Work-order drafts attach **only the exported PDF** — the WO **Files** tab is not
-offered the way a PO's attachments are.
 
 ## BOM backlinks
 
@@ -303,9 +272,9 @@ InnerCider card at `chrome://extensions` (or quit and reopen the browser).
   - vendor from the **Vendor (Company - Office)** label’s linked value,
   - materials from the **Materials** `[role=”grid”]` (Material Name, UoM,
     Quantity Ordered, Extended Cost).
-  On a **work-order** page it skips all of that scraping and asks Innergy
-  directly (`WorkOrderNumberAndNameQuery`, `ProjectNumberAndNameQuery`,
-  `EmployeeListQuery` for the recipient group).
+  Innergy shows the same export button on work-order pages; the extension
+  doesn't add its button there (it only injects when the URL is a purchase
+  order).
 - It tells **background/features/draft-email.js** to arm, arms the MAIN-world
   `window.open` hook, then clicks the real export button.
 - Innergy's export ends in `window.open(<pdf url>)` — an Azure blob URL with a

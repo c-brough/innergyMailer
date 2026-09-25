@@ -37,8 +37,8 @@ function isPdf(item) {
   return !!item.filename && /\.pdf$/i.test(item.filename);
 }
 
-// Best-effort log detail: did the filename include the exact PO / work-order
-// number? (Innergy's export names it e.g. PO-100005_INNERGYDefault_….pdf, but a
+// Best-effort log detail: did the filename include the exact PO number?
+// (Innergy's export names it e.g. PO-100005_INNERGYDefault_….pdf, but a
 // report layout could name it otherwise — informational only, never a gate.)
 function filenameContainsDocNumber(docNumber, path) {
   if (!path || !docNumber) return false;
@@ -149,7 +149,7 @@ export async function handleExportPdfUrl(msg, sender, sendResponse) {
 
   try {
     // No filename: Chrome derives it from the URL path, which already carries
-    // the PO / work-order number (e.g. PO-100005_INNERGYDefault_….pdf).
+    // the PO number (e.g. PO-100005_INNERGYDefault_….pdf).
     const path = await downloadAndWait(msg.url);
     if (!path) throw new Error("download produced no file");
     await deliver(path, pending);
