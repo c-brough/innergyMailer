@@ -142,7 +142,8 @@ native-host/
   innergy_mailer_host_linux.py    Linux host — drafts via Graph API or xdg-email
   run-host.bat                    Windows wrapper (created by install_windows.ps1)
   com.innergy.mailer.json         Native-messaging manifest (written by installer)
-install.sh                        macOS installer
+Install InnerCider.command        macOS installer — double-click; runs install.sh in Terminal
+install.sh                        macOS installer (host + extension copy)
 install.bat                       Windows installer — double-click; auto-elevates and runs the .ps1
 install_windows.ps1               Windows installer (PowerShell; invoked by install.bat)
 install_linux.sh                  Linux installer (incl. Raspberry Pi OS)
@@ -156,19 +157,23 @@ required for the New Outlook path.
 
 1. **Double-click `install.bat`** in the project folder. Windows will ask for
    Administrator access (a UAC prompt) — click **Yes**. The installer then sets
-   everything up: installs Python dependencies (`pywin32`, `msal`, `requests`),
-   compiles the host to an `.exe`, writes the JSON manifest, and registers it in
-   `HKLM` (required for system-wide Chrome installs in `Program Files`). When it
-   finishes, press a key to close the window.
+   everything up in a second, Administrator window: installs Python dependencies
+   (`pywin32`, `msal`, `requests`), compiles the host to an `.exe`, writes the
+   JSON manifest, registers it in `HKLM` (required for system-wide Chrome
+   installs in `Program Files`), and copies the extension to
+   `C:\Program Files\InnerCider\extension`. That window closes when it's done
+   (or stays open on an error).
 
    > Prefer PowerShell? You can run the underlying script directly instead: open
    > PowerShell **as Administrator** and run `.\install_windows.ps1` from the
    > project folder. (`install.bat` just elevates and calls this for you.)
 
-2. Load the extension in Chrome:
-   - `chrome://extensions` → **Developer mode** on → **Load unpacked** →
-     select the `extension/` folder.
-   - Confirm the extension ID is `akplcachdkpchhcacbbbnkgbfnfgifbn`.
+2. Back in the first window, the installer opens Chrome's (or Edge's)
+   Extensions page and puts the extension folder's path on the clipboard. Turn
+   on **Developer mode** → **Load unpacked** → paste the path into the
+   **Folder** box → **Select Folder**. Confirm the extension ID is
+   `akplcachdkpchhcacbbbnkgbfnfgifbn`. (Chrome doesn't allow an installer to add
+   an extension that isn't from the Web Store, so this one click is manual.)
 
 3. Open extension Options (right-click icon → **Options**) and select your mail app:
    - **Outlook Classic (Win)** — classic Outlook must be installed.
@@ -207,13 +212,23 @@ PDF (plus any PO file attachments).
 
 ## Install — macOS
 
-```bash
-./install.sh
-```
+**Double-click `Install InnerCider.command`** in the project folder (or run
+`./install.sh` in Terminal — it's the same installer).
 
-This copies the native host to `~/Library/Application Support/InnerCider/`
-and registers it with every installed Chromium-family browser. The host is
-installed there — **not** inside the repo — because `~/Documents`, `~/Desktop`,
+> If macOS says the file can't be opened because it's from an unidentified
+> developer (it will if the folder was downloaded as a ZIP), right-click it →
+> **Open** → **Open**. On macOS 15 or later, instead go to **System Settings →
+> Privacy & Security** and click **Open Anyway** next to the message.
+
+This copies the native host and the extension to
+`~/Library/Application Support/InnerCider/` and registers the host with every
+installed Chromium-family browser. It then opens the browser's Extensions page
+with the extension folder's path on the clipboard: turn on **Developer mode** →
+**Load unpacked** → press **Cmd+Shift+G**, paste, **Return** → **Select**.
+(Chrome doesn't allow an installer to add an extension that isn't from the Web
+Store, so this one click is manual.)
+
+The host is installed there — **not** inside the repo — because `~/Documents`, `~/Desktop`,
 and `~/Downloads` are macOS TCC-protected folders that Chrome is not allowed to
 *launch* a native-messaging host from; doing so makes the host silently "exit"
 and no draft is created.
@@ -260,11 +275,21 @@ Arm64 and armv7l are fine — nothing here needs a compiled wheel.
 
 ### Loading the extension (all platforms)
 
+The macOS and Windows installers open this page for you and copy the extension
+to a folder of its own first (so the install survives deleting the download).
+On Linux, or to load it by hand:
+
 1. Open `chrome://extensions`.
 2. Turn on **Developer mode** (top right).
-3. Click **Load unpacked** and choose the `extension/` folder.
+3. Click **Load unpacked** and choose the extension folder — the installed copy
+   (`~/Library/Application Support/InnerCider/extension` on macOS,
+   `C:\Program Files\InnerCider\extension` on Windows) or the repo's
+   `extension/` folder if you're developing and want edits to take effect.
 4. Confirm the extension ID is `akplcachdkpchhcacbbbnkgbfnfgifbn`
    (the manifest `key` pins it so the native host’s allow-list matches).
+
+**Updating:** re-run the installer, then click the reload arrow on the
+InnerCider card at `chrome://extensions` (or quit and reopen the browser).
 
 > If you get a different extension ID, remove the extension, delete any other
 > copies loaded from a different folder, and reload from this folder fresh.
@@ -377,12 +402,14 @@ Remove-Item “HKLM:\SOFTWARE\Google\Chrome\NativeMessagingHosts\com.innergy.mai
 Remove-Item “HKLM:\SOFTWARE\Microsoft\Edge\NativeMessagingHosts\com.innergy.mailer” -ErrorAction SilentlyContinue
 Remove-Item “HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.innergy.mailer” -ErrorAction SilentlyContinue
 Remove-Item “C:\innergy” -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item “$env:ProgramFiles\InnerCider” -Recurse -Force -ErrorAction SilentlyContinue
 ```
 
 **macOS:**
 ```bash
 rm -f “$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts/com.innergy.mailer.json”
 # (repeat for other browsers if you use them)
+rm -rf “$HOME/Library/Application Support/InnerCider”   # host and extension copy
 ```
 
 **Linux:**

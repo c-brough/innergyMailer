@@ -1,9 +1,98 @@
 # install_windows.ps1
-# Registers the InnerCider native messaging host for Chrome/Edge on Windows.
+# Installs InnerCider on Windows: registers the native messaging host for
+# Chrome/Edge, copies the extension to a fixed folder, and opens the browser's
+# Extensions page for the one click Chrome won't let a script make.
 # Run from PowerShell: .\install_windows.ps1
-# (Right-click > "Run with PowerShell" also works)
+# (Right-click > "Run with PowerShell" also works; install.bat is the easy way)
+#
+# install.bat runs this twice, because registering the host needs Administrator
+# but the browser should open as the signed-in user:
+#   -SkipBrowser   the elevated pass: install everything, open nothing
+#   -BrowserOnly   the normal pass afterwards: just open the Extensions page
+
+param(
+    [switch]$SkipBrowser,
+    [switch]$BrowserOnly
+)
 
 $ErrorActionPreference = "Stop"
+
+$ExtensionId = "akplcachdkpchhcacbbbnkgbfnfgifbn"
+
+# Where the extension copy lives. Chrome won't let a script add an extension
+# that isn't from the Web Store, so "Load unpacked" stays a manual click -- but it
+# should point at a folder that outlives this download (a copy loaded straight
+# from Downloads breaks the day that folder is cleaned out). Program Files when
+# elevated so every user on the PC can load it; the per-user folder otherwise.
+# The manifest "key" pins the extension ID, so the folder doesn't affect it.
+function Get-ExtensionDir([bool]$elevated) {
+    $machine = Join-Path $env:ProgramFiles "InnerCider\extension"
+    $user    = Join-Path $env:LOCALAPPDATA "InnerCider\extension"
+    if ($elevated) { return $machine }
+    # The non-elevated -BrowserOnly pass must find the copy the elevated pass made.
+    if ($BrowserOnly -and (Test-Path $machine)) { return $machine }
+    return $user
+}
+
+function Find-Browser {
+    $browsers = @(
+        @{ Exe = "chrome.exe"; Name = "Chrome"; Url = "chrome://extensions" },
+        @{ Exe = "msedge.exe"; Name = "Edge";   Url = "edge://extensions" }
+    )
+    foreach ($b in $browsers) {
+        foreach ($root in @("HKCU:", "HKLM:")) {
+            $key  = "$root\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\$($b.Exe)"
+            $path = (Get-ItemProperty -Path $key -ErrorAction SilentlyContinue).'(default)'
+            if ($path) { $path = $path.Trim('"') }
+            if ($path -and (Test-Path $path)) { return $b + @{ Path = $path } }
+        }
+    }
+    return $null
+}
+
+function Show-ExtensionStep([string]$extDir) {
+    try { Set-Clipboard -Value $extDir } catch {}
+    $browser = Find-Browser
+    if ($browser) {
+        try { Start-Process -FilePath $browser.Path -ArgumentList $browser.Url } catch {}
+        $name = $browser.Name
+    } else {
+        $name = "your browser"
+    }
+
+    Write-Host ""
+    Write-Host "==============================================================" -ForegroundColor Cyan
+    Write-Host " One last step: add the extension to $name" -ForegroundColor Cyan
+    Write-Host "==============================================================" -ForegroundColor Cyan
+    if ($browser) {
+        Write-Host "$name is opening its Extensions page. On that page:"
+    } else {
+        Write-Host "Open chrome://extensions in your browser. On that page:"
+    }
+    Write-Host "  1. Turn on 'Developer mode'."
+    Write-Host "  2. Click 'Load unpacked'."
+    Write-Host "  3. Paste (Ctrl+V) into the Folder box and click 'Select Folder'."
+    Write-Host "     The path is on your clipboard:"
+    Write-Host "       $extDir" -ForegroundColor Yellow
+    Write-Host "  4. Check the InnerCider card shows ID $ExtensionId"
+    Write-Host ""
+    Write-Host "Updating an existing install? Skip those steps and click the reload"
+    Write-Host "arrow on the InnerCider card instead (or close and reopen the browser)."
+    Write-Host ""
+    Write-Host "Then pick your mail app: right-click the InnerCider icon > Options."
+    Write-Host "  - Outlook Classic: ready to use."
+    Write-Host "  - New Outlook: paste your Azure App Client ID in Options, then click"
+    Write-Host "    'Sign in' for a one-time Microsoft account sign-in."
+    Write-Host "    See README.md for Azure app registration steps."
+    Write-Host ""
+    Write-Host "Open a PO on app.innergy.com and click 'Draft Email w/ PDF'."
+    Write-Host ""
+}
+
+if ($BrowserOnly) {
+    Show-ExtensionStep (Get-ExtensionDir $false)
+    exit 0
+}
 
 # --- Require Administrator ---
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]"Administrator")
@@ -188,18 +277,23 @@ if ($registered -eq 0) {
     Write-Warning "No supported browsers detected. Chrome or Edge must be installed."
 }
 
+# --- Copy the extension to its fixed folder ---
+$extSource = Join-Path $scriptDir "extension"
+$extDir    = Get-ExtensionDir $isAdmin
+if (-not (Test-Path (Join-Path $extSource "manifest.json"))) {
+    Write-Error "Extension folder not found: $extSource"
+    exit 1
+}
+if (Test-Path $extDir) { Remove-Item $extDir -Recurse -Force }
+New-Item -ItemType Directory -Force -Path (Split-Path $extDir) | Out-Null
+Copy-Item $extSource $extDir -Recurse
+Write-Host ""
+Write-Host "Extension: $extDir" -ForegroundColor Green
+
 # --- Done ---
 Write-Host ""
 Write-Host "=== Installation complete ===" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "Next steps:"
-Write-Host "  1. In Chrome, go to chrome://extensions and load the 'extension' folder"
-Write-Host "     (or reload if already loaded)"
-Write-Host "  2. Click the extension icon > Options, and select 'Microsoft Outlook'"
-Write-Host "  3. Open a PO on app.innergy.com and click 'Draft Email w/ PDF'"
-Write-Host ""
-Write-Host "  - Outlook Classic: ready to use."
-Write-Host "  - New Outlook: open extension Options, paste your Azure App Client ID,"
-Write-Host "    then click 'Sign in' for a one-time Microsoft account sign-in."
-Write-Host "    See README.md for Azure app registration steps."
-Write-Host ""
+
+if (-not $SkipBrowser) {
+    Show-ExtensionStep $extDir
+}

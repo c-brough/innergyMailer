@@ -120,8 +120,9 @@ if (Test-Path $pemTemp) {
 }
 
 # ---------------------------------------------------------------------------
-# 3. Windows native host installer ZIP (for GitHub Releases)
-#    Contains everything a Windows user needs to install the native host.
+# 3. Windows installer ZIP (for GitHub Releases)
+#    Contains everything a Windows user needs: install.bat installs the native
+#    host and copies the extension, laid out the way install_windows.ps1 expects.
 # ---------------------------------------------------------------------------
 Write-Host "Building Windows installer ZIP..." -ForegroundColor Yellow
 
@@ -133,7 +134,9 @@ New-Item -ItemType Directory -Force -Path $tempWinDir | Out-Null
 # Copy everything the installer needs.
 Copy-Item (Join-Path $scriptDir "install.bat")          $tempWinDir
 Copy-Item (Join-Path $scriptDir "install_windows.ps1")  $tempWinDir
-Copy-Item (Join-Path $scriptDir "native-host\innergy_mailer_host_win.py") $tempWinDir
+Copy-Item $extDir (Join-Path $tempWinDir "extension") -Recurse
+New-Item -ItemType Directory -Force -Path (Join-Path $tempWinDir "native-host") | Out-Null
+Copy-Item (Join-Path $scriptDir "native-host\innergy_mailer_host_win.py") (Join-Path $tempWinDir "native-host")
 
 if (Test-Path $winZipOut) { Remove-Item $winZipOut -Force }
 [System.IO.Compression.ZipFile]::CreateFromDirectory($tempWinDir, $winZipOut)
@@ -161,8 +164,7 @@ Write-Host ""
 Write-Host "  2. Create a GitHub Release (git tag v1.0.0, push, then create release)"
 Write-Host "     Attach innercider-windows-installer.zip as a release asset."
 Write-Host ""
-Write-Host "  3. Send customers two links:"
-Write-Host "     - Chrome Web Store install URL"
-Write-Host "     - GitHub Release download URL for the Windows installer ZIP"
-Write-Host "     They unzip the installer, double-click install.bat, done."
+Write-Host "  3. Send customers the GitHub Release download URL for the Windows"
+Write-Host "     installer ZIP. They unzip it, double-click install.bat, and follow"
+Write-Host "     its last step (Load unpacked) on the Extensions page it opens."
 Write-Host ""
