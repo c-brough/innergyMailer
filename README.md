@@ -17,7 +17,9 @@ A Chrome extension (+ native helper) with three tools for Innergy:
 The **”Draft Email w/ PDF”** button next to **Export Custom PDF** on an Innergy
 purchase-order page. Clicking it:
 
-1. Exports the PO PDF using Innergy’s existing **Export Custom PDF** button.
+1. Exports the PO PDF using one of Innergy’s existing buttons — **Generate
+   PDF** (the standard PO PDF, the default) or **Export Custom PDF**. Pick which
+   under **PO email PDF** in the extension’s Options.
 2. Drafts a new email in **Apple Mail** or **Microsoft Outlook** (your choice)
    with that PDF attached, where:
    - **Subject** = `<PO#> & <vendor name>` (e.g. `PO-100000 & Zepp Framers LLC - Sewell`)
@@ -276,10 +278,16 @@ InnerCider card at `chrome://extensions` (or quit and reopen the browser).
   doesn't add its button there (it only injects when the URL is a purchase
   order).
 - It tells **background/features/draft-email.js** to arm, arms the MAIN-world
-  `window.open` hook, then clicks the real export button.
-- Innergy's export ends in `window.open(<pdf url>)` — an Azure blob URL with a
-  SAS token, plain GET, no `Content-Disposition`. **content/features/export-capture-main.js**
-  catches that call while armed, hands the URL to the background worker and
+  `window.open` hook, then clicks the real export button chosen in Options
+  (`pdfSource` in `chrome.storage.local`: `"generate"` → the
+  `generate_pdf` button, the default; `"custom"` → the
+  `ExportCustomReportDefault_single` button). If the chosen button isn't on the
+  page it falls back to the other one and logs a warning.
+- Both exports end in `window.open` of an Azure blob URL with a SAS token, plain
+  GET, no `Content-Disposition` — **Export Custom PDF** as `window.open(<pdf url>)`,
+  **Generate PDF** as `window.open("", "_blank")` followed by
+  `w.location.href = <pdf url>`. **content/features/export-capture-main.js**
+  catches either shape while armed, hands the URL to the background worker and
   swallows the popup; the worker fetches it with `chrome.downloads.download()`.
   That is what makes the feature work under either Chrome PDF setting — “Open
   PDFs in Chrome” never produces a download to watch for, which is also the

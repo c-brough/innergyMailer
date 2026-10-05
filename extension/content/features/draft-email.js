@@ -11,8 +11,10 @@
  *      for inclusion.
  *   2. Asks the background worker to start watching for the next download.
  *   3. Arms the MAIN-world window.open hook (see export-capture-main.js).
- *   4. Clicks the real "Export Custom PDF" button.
- * Innergy's export ends in window.open(<pdf url>); the hook hands that URL
+ *   4. Clicks the real export button the user picked in Options: "Generate
+ *      PDF" (Innergy's standard PO PDF — the default) or "Export Custom PDF".
+ * Either export ends in window.open of the PDF's URL (directly, or via a blank
+ * tab it then navigates — see export-capture-main.js); the hook hands that URL
  * back here and we forward it to the background worker, which downloads it
  * and passes the file + subject/body to the native messaging host, which
  * creates the Mail draft. The URL path is what makes this work whether the
@@ -25,7 +27,45 @@
 
   const IC = window.InnerCider;
   const EXPORT_BTN_SELECTOR = 'button[data-testid="ExportCustomReportDefault_single"]';
+  const GENERATE_BTN_SELECTOR = 'button[data-testid="generate_pdf"]';
   const OUR_BTN_ID = "innercider-draft-email-btn";
+
+  // ---- PDF source setting --------------------------------------------------------
+  // Which Innergy button produces the attached PDF. Stored as `pdfSource` in
+  // chrome.storage.local by the Options page: "generate" (the default) or
+  // "custom". Cached here so the click handler can read it synchronously.
+
+  const PDF_SOURCES = {
+    generate: { label: "Generate PDF", find: () => document.querySelector(GENERATE_BTN_SELECTOR) },
+    custom: { label: "Export Custom PDF", find: () => document.querySelector(EXPORT_BTN_SELECTOR) },
+  };
+  const DEFAULT_PDF_SOURCE = "generate";
+  let pdfSource = DEFAULT_PDF_SOURCE;
+
+  chrome.storage.local.get("pdfSource", (data) => {
+    if (PDF_SOURCES[data.pdfSource]) pdfSource = data.pdfSource;
+  });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local" || !changes.pdfSource) return;
+    const next = changes.pdfSource.newValue;
+    pdfSource = PDF_SOURCES[next] ? next : DEFAULT_PDF_SOURCE;
+  });
+
+  // The button to click for this draft: the chosen source, falling back to the
+  // other one if Innergy isn't showing it, so the feature still produces a PDF.
+  function findSourceBtn() {
+    const chosen = PDF_SOURCES[pdfSource];
+    const btn = chosen.find();
+    if (btn) return { btn, label: chosen.label };
+    const otherKey = pdfSource === "generate" ? "custom" : "generate";
+    const other = PDF_SOURCES[otherKey];
+    const fallback = other.find();
+    if (fallback) {
+      IC.warn(`"${chosen.label}" button not found; using "${other.label}" instead.`);
+      return { btn: fallback, label: other.label };
+    }
+    return null;
+  }
 
   // ---- DOM scraping -----------------------------------------------------------
 
@@ -205,11 +245,14 @@
       document.getElementById(OUR_BTN_ID)?.remove();
       return;
     }
-    const exportBtn = document.querySelector(EXPORT_BTN_SELECTOR);
-    if (!exportBtn) return;
+    // Anchor on Export Custom PDF where it exists (the button's long-standing
+    // spot), else next to Generate PDF.
+    const anchor =
+      document.querySelector(EXPORT_BTN_SELECTOR) || document.querySelector(GENERATE_BTN_SELECTOR);
+    if (!anchor) return;
     if (document.getElementById(OUR_BTN_ID)) return; // already injected
-    const btn = makeButton(exportBtn);
-    exportBtn.parentElement.insertBefore(btn, exportBtn);
+    const btn = makeButton(anchor);
+    anchor.parentElement.insertBefore(btn, anchor);
   }
 
   // ---- Click handler ------------------------------------------------------------
@@ -218,11 +261,13 @@
     ev.preventDefault();
     ev.stopPropagation();
 
-    const exportBtn = document.querySelector(EXPORT_BTN_SELECTOR);
-    if (!exportBtn) {
-      alert("InnerCider: couldn't find the Export Custom PDF button.");
+    const source = findSourceBtn();
+    if (!source) {
+      alert(`InnerCider: couldn't find the ${PDF_SOURCES[pdfSource].label} button.`);
       return;
     }
+    const exportBtn = source.btn;
+    IC.log(`PDF source: ${source.label}`);
 
     const me = ev.currentTarget;
     const original = me.textContent;
