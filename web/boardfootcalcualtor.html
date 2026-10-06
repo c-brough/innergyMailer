@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Board Footage Calculator</title>
+  <style>
+    /* Basic Resets & Global Styles */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f5f5f5;
+      color: #333;
+      padding: 1rem; /* Increased padding for mobile */
+    }
+
+    /* Headings */
+    h2 {
+      text-align: center;
+      margin-bottom: 1rem; /* Increased margin */
+      font-size: 1.5rem; /* Slightly larger for mobile readability */
+      color: #0091CE; /* Updated header text color */
+    }
+
+    /* Your Name Input Section */
+    .name-input-section {
+        margin-bottom: 1.5rem;
+        padding: 0.75rem;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    .name-input-section label {
+        font-weight: bold;
+        font-size: 1rem;
+        color: #555;
+    }
+    .name-input-section input[type="text"] {
+        width: 100%;
+        padding: 0.75rem;
+        font-size: 1.1rem;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        -webkit-appearance: none;
+    }
+    .name-input-section input[type="text"]:focus {
+        outline: 2px solid #007bff;
+        outline-offset: 1px;
+    }
+
+    /* NEW: Style for thickness display */
+    #thicknessDisplay {
+        text-align: center;
+        margin-bottom: 1rem;
+        font-size: 1rem;
+        color: #666;
+        font-weight: bold;
+        background-color: #e9e9e9;
+        padding: 0.5rem;
+        border-radius: 4px;
+    }
+
+    /* Entry List Container */
+    .entry-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem; /* Increased gap between rows for better spacing */
+      margin-bottom: 6rem; /* IMPORTANT: Increased margin to prevent clipping by fixed footer */
+    }
+
+    /* Individual Entry Row */
+    .entry-row {
+      display: grid;
+      /* Adjusted grid-template-columns to include space for the remove button */
+      grid-template-columns: 0.5fr 1fr 1.5fr 1.5fr 0.5fr; /* Row#, Qty, Width, Length, RemoveBtn */
+      gap: 0.5rem; /* Increased gap within rows */
+      background: #fff;
+      padding: 0.75rem; /* Increased padding for better touch target */
+      border-radius: 8px; /* Slightly more rounded corners */
+      align-items: center;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* Slightly more prominent shadow */
+    }
+    .entry-row .row-number {
+      font-weight: bold;
+      text-align: center;
+      font-size: 1.1rem; /* Ensure row number is clear */
+    }
+
+    /* Input Fields */
+    .entry-row input {
+      width: 100%;
+      padding: 0.75rem; /* Increased padding for larger touch target */
+      font-size: 1.1rem; /* Slightly larger font inside inputs */
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      -webkit-appearance: none; /* Remove default iOS input styling */
+    }
+    .entry-row input:focus {
+        outline: 2px solid #007bff; /* Clear focus indicator */
+        outline-offset: 1px;
+    }
+
+    /* Input Units (e.g., " and ') */
+    .input-wrapper {
+      position: relative;
+    }
+    .input-wrapper .unit {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      pointer-events: none;
+      color: #999;
+      font-size: 1rem; /* Slightly larger unit text */
+      left: 0.75rem;
+      opacity: 0; /* Initially hidden */
+      transition: opacity 0.1s ease-in-out; /* Smooth transition for visibility */
+    }
+
+    /* Remove Row Button */
+    .remove-row-btn {
+        background: #dc3545; /* Red color for delete */
+        color: #fff;
+        border: none;
+        border-radius: 50%; /* Circular button */
+        width: 30px; /* Fixed width */
+        height: 30px; /* Fixed height */
+        font-size: 1.1rem; /* Larger 'X' */
+        font-weight: bold;
+        cursor: pointer;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        transition: background 0.2s ease-in-out, transform 0.1s ease-in-out;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+        margin-left: auto; /* Push to the right within its grid cell */
+    }
+    .remove-row-btn:hover {
+        background: #c82333; /* Darker red on hover */
+        transform: scale(1.05); /* Slight scale effect */
+    }
+    .remove-row-btn:active {
+        background: #bd2130; /* Even darker on active/tap */
+        transform: scale(0.98);
+    }
+
+    /* Footer Section */
+    #footer {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #fff;
+      border-top: 1px solid #ddd;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem;
+      box-shadow: 0 -2px 4px rgba(0,0,0,0.1);
+    }
+    #total {
+      font-size: 1.25rem;
+      font-weight: bold;
+      color: #0091CE;
+    }
+
+    /* Container for Submit and Cancel buttons */
+    .footer-buttons-container {
+        display: flex;
+        gap: 0.75rem;
+    }
+
+    /* Common Button Styles for Submit and Cancel */
+    .footer-button {
+      padding: 0.75rem 1.25rem;
+      background: #fff;
+      color: #555;
+      border: 1px solid #bbb;
+      border-radius: 6px;
+      font-size: 1.1rem;
+      cursor: pointer;
+      transition: background 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out;
+      box-shadow: none;
+
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+    .footer-button svg {
+        fill: #555;
+        width: 20px;
+        height: 20px;
+        transition: fill 0.2s ease-in-out;
+    }
+
+    .footer-button:disabled {
+      background: #f0f0f0;
+      color: #aaa;
+      border-color: #ddd;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    .footer-button:disabled svg {
+        fill: #aaa;
+    }
+
+    .footer-button:not(:disabled):hover {
+      background: #f8f8f8;
+      border-color: #999;
+      color: #333;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    }
+    .footer-button:not(:disabled):hover svg {
+        fill: #333;
+    }
+
+    .footer-button:not(:disabled):active {
+        background: #eee;
+        border-color: #888;
+        color: #222;
+    }
+    .footer-button:not(:disabled):active svg {
+        fill: #222;
+    }
+
+
+    /* --- Media Queries for FileMaker Go (Responsive Adjustments) --- */
+
+    /* For Tablets and Smaller Desktops (e.g., iPad in portrait) */
+    @media (max-width: 768px) {
+        body {
+            padding: 1.25rem;
+        }
+        h2 {
+            font-size: 1.65rem;
+        }
+        .name-input-section {
+            padding: 0.65rem;
+        }
+        .name-input-section input[type="text"] {
+            padding: 0.7rem;
+            font-size: 1.05rem;
+        }
+        #thicknessDisplay {
+            font-size: 0.95rem;
+            padding: 0.4rem;
+        }
+        .entry-list {
+            gap: 0.85rem;
+        }
+        .entry-row {
+            grid-template-columns: 0.5fr 1fr 1.25fr 1.25fr 0.5fr;
+            padding: 0.65rem;
+            gap: 0.4rem;
+        }
+        .entry-row input {
+            padding: 0.7rem;
+            font-size: 1.05rem;
+        }
+        .input-wrapper .unit {
+            left: 0.7rem;
+        }
+        .remove-row-btn {
+            width: 28px;
+            height: 28px;
+            font-size: 1rem;
+        }
+        #footer {
+            padding: 0.85rem;
+        }
+        #total {
+            font-size: 1.2rem;
+        }
+        .footer-button {
+            padding: 0.7rem 1.1rem;
+            font-size: 1.05rem;
+            gap: 0.4rem;
+        }
+        .footer-button svg {
+            width: 18px;
+            height: 18px;
+        }
+        .footer-buttons-container {
+            gap: 0.5rem;
+        }
+    }
+
+    /* For Phones (e.g., iPhone) */
+    @media (max-width: 480px) {
+        body {
+            padding: 0.5rem;
+        }
+        h2 {
+            font-size: 1.4rem;
+            margin-bottom: 0.75rem;
+        }
+        .name-input-section {
+            padding: 0.5rem;
+            gap: 0.4rem;
+        }
+        .name-input-section label {
+            font-size: 0.95rem;
+        }
+        .name-input-section input[type="text"] {
+            padding: 0.65rem;
+            font-size: 1rem;
+        }
+        #thicknessDisplay {
+            font-size: 0.9rem;
+            padding: 0.3rem;
+            margin-bottom: 0.75rem;
+        }
+        .entry-list {
+            gap: 0.5rem;
+            margin-bottom: 6rem;
+        }
+        .entry-row {
+            grid-template-columns: 1fr;
+            gap: 0.5rem;
+            padding: 0.6rem;
+        }
+        .entry-row .row-number {
+            text-align: left;
+            padding-bottom: 0.25rem;
+            font-size: 1rem;
+        }
+        .entry-row input {
+            width: 100%;
+            padding: 0.65rem;
+            font-size: 1rem;
+        }
+        .input-wrapper .unit {
+            left: 0.65rem;
+            font-size: 0.95rem;
+        }
+        .remove-row-btn {
+            width: 100%;
+            border-radius: 6px;
+            margin-top: 0.5rem;
+            height: auto;
+            padding: 0.5rem;
+            font-size: 1rem;
+            margin-left: 0;
+        }
+        #footer {
+            padding: 0.65rem;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        #total {
+            font-size: 1.1rem;
+        }
+        .footer-button {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            font-size: 1rem;
+            gap: 0.3rem;
+        }
+        .footer-button svg {
+            width: 16px;
+            height: 16px;
+        }
+        .footer-buttons-container {
+            width: 100%;
+            flex-direction: row;
+            justify-content: space-around;
+            gap: 0.5rem;
+        }
+    }
+
+  </style>
+</head>
+<body>
+  <h2>Board Footage Entry</h2>
+
+  <div class="name-input-section">
+    <label for="yourName">Your name:</label>
+    <input type="text" id="yourName" placeholder="Enter your name" />
+  </div>
+
+  <!-- NEW: Hidden input to store thickness from FileMaker -->
+  <input type="hidden" id="nominalThickness" value="[FMP-InventoryStock::nomThickness]" />
+  <!-- NEW: Element to display the thickness -->
+  <div id="thicknessDisplay"></div>
+
+  <div class="entry-list" id="entryList"></div>
+  <div id="footer">
+    <div id="total">Total BF: 0.00</div>
+    <div class="footer-buttons-container">
+        <button id="cancelBtn" class="footer-button">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+            </svg>
+            <span>Cancel</span>
+        </button>
+        <button id="submitBtn" class="footer-button" disabled>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <path d="M19 11h-6V5h-2v6H5v2h6v6h2v-6h6z"/>
+            </svg>
+            <span>Submit</span>
+        </button>
+    </div>
+  </div>
+  <script>
+    const entryList = document.getElementById('entryList');
+    const totalDisplay = document.getElementById('total');
+    const submitBtn = document.getElementById('submitBtn');
+    const cancelBtn = document.getElementById('cancelBtn');
+    const yourNameInput = document.getElementById('yourName');
+    // NEW: Get references to thickness elements
+    const nominalThicknessInput = document.getElementById('nominalThickness');
+    const thicknessDisplay = document.getElementById('thicknessDisplay');
+    let debounce;
+
+    // NEW: Variable to store the parsed thickness, default to 1 inch
+    let parsedThickness = 1;
+
+    // NEW: Function to parse fraction string (e.g., "10/4" -> 2.5)
+    function parseFraction(fractionString) {
+        if (!fractionString || typeof fractionString !== 'string') {
+            return 1; // Default to 1 if input is invalid
+        }
+        const parts = fractionString.split('/');
+        if (parts.length === 2) {
+            const numerator = parseFloat(parts[0]);
+            const denominator = parseFloat(parts[1]);
+            if (!isNaN(numerator) && !isNaN(denominator) && denominator !== 0) {
+                return numerator / denominator;
+            }
+        } else if (!isNaN(parseFloat(fractionString))) {
+            return parseFloat(fractionString); // Handle whole numbers directly
+        }
+        return 1; // Default to 1 if parsing fails
+    }
+
+    // Function to dynamically place the unit symbol next to the input value
+    function placeUnit(input) {
+      const unit = input.parentNode.querySelector('.unit');
+      if (unit) {
+        const len = input.value.length;
+        if (len > 0) {
+          unit.style.opacity = '1';
+          unit.style.left = `calc(${len}ch + 1rem)`;
+        } else {
+          unit.style.opacity = '0';
+        }
+      }
+    }
+
+    // Function to create a new input row
+    function createRow(index) {
+      const row = document.createElement('div');
+      row.className = 'entry-row';
+      row.innerHTML = `
+        <div class="row-number">${index}</div>
+        <input type="number" class="qty" min="1" step="1" placeholder="Qty" inputmode="numeric" required />
+        <div class="input-wrapper">
+          <input type="number" class="width" min="0.25" step="0.25" placeholder="Width" inputmode="decimal" required />
+          <span class="unit">"</span>
+        </div>
+        <div class="input-wrapper">
+          <input type="number" class="length" min="0.25" step="0.25" placeholder="Length" inputmode="decimal" required />
+          <span class="unit">"</span>
+        </div>
+        <button type="button" class="remove-row-btn">X</button>
+      `;
+      attachListeners(row);
+      return row;
+    }
+
+    // Function to attach event listeners to inputs within a row
+    function attachListeners(row) {
+      row.querySelectorAll('input').forEach(input => {
+        input.addEventListener('input', () => {
+          recalc();
+          maybeAddRow();
+          toggleSubmit();
+          if (input.parentNode.classList.contains('input-wrapper')) {
+            placeUnit(input);
+          }
+        });
+        if (input.parentNode.classList.contains('input-wrapper')) {
+          placeUnit(input);
+        }
+      });
+
+      const removeBtn = row.querySelector('.remove-row-btn');
+      if (removeBtn) {
+          removeBtn.addEventListener('click', () => removeRow(row));
+      }
+    }
+
+    // MODIFIED: Function to recalculate total board footage, now using parsedThickness
+    function recalc() {
+      let total = 0;
+      document.querySelectorAll('.entry-row').forEach(r => {
+        const qty = parseFloat(r.querySelector('.qty').value) || 0;
+        const width = parseFloat(r.querySelector('.width').value) || 0;
+        const length = parseFloat(r.querySelector('.length').value) || 0;
+        total += (qty * width * length * parsedThickness) / 144; // Multiplied by parsedThickness
+      });
+      totalDisplay.textContent = `Total BF: ${total.toFixed(2)}`;
+    }
+
+    // Function to conditionally add a new row if the last one is filled
+    function maybeAddRow() {
+      clearTimeout(debounce);
+      debounce = setTimeout(() => {
+        const rows = document.querySelectorAll('.entry-row');
+        const last = rows[rows.length - 1];
+        if (last && [...last.querySelectorAll('input')].every(i => i.value.trim() !== '')) {
+          entryList.append(createRow(rows.length + 1));
+        }
+      }, 300);
+    }
+
+    // Function to enable/disable the submit button based on valid input AND username
+    function toggleSubmit() {
+      const userNameFilled = yourNameInput.value.trim() !== '';
+      const anyValidRow = Array.from(document.querySelectorAll('.entry-row')).some(r => {
+        const qty = parseFloat(r.querySelector('.qty').value);
+        const width = parseFloat(r.querySelector('.width').value);
+        const length = parseFloat(r.querySelector('.length').value);
+        return qty > 0 && width > 0 && length > 0;
+      });
+      submitBtn.disabled = !(userNameFilled && anyValidRow);
+    }
+
+    // Function to remove a row
+    function removeRow(rowElement) {
+        rowElement.remove();
+        updateRowNumbers();
+        recalc();
+        toggleSubmit();
+
+        if (entryList.children.length === 0) {
+            entryList.append(createRow(1));
+        }
+    }
+
+    // Function to update row numbers after removal
+    function updateRowNumbers() {
+        document.querySelectorAll('.entry-row').forEach((row, index) => {
+            row.querySelector('.row-number').textContent = index + 1;
+        });
+    }
+
+    // --- FileMaker Integration ---
+    submitBtn.addEventListener('click', () => {
+        const userName = yourNameInput.value.trim();
+        const totalBF = parseFloat(totalDisplay.textContent.replace('Total BF: ', '')) || 0;
+
+        const lineItems = [];
+        document.querySelectorAll('.entry-row').forEach(r => {
+            const qty = parseFloat(r.querySelector('.qty').value);
+            const width = parseFloat(r.querySelector('.width').value);
+            const length = parseFloat(r.querySelector('.length').value);
+
+            if (qty > 0 && width > 0 && length > 0) {
+                lineItems.push({
+                    qty: qty,
+                    width: width,
+                    length: length,
+                    boardFeet: (qty * width * length * parsedThickness) / 144 // Ensure line item BF also uses thickness
+                });
+            }
+        });
+
+        const dataToSend = JSON.stringify({
+            userName: userName,
+            totalBoardFootage: totalBF,
+            lineItems: lineItems,
+            nominalThickness: nominalThicknessInput.value // Include the raw thickness string
+        });
+
+        if (window.FileMaker) {
+            FileMaker.PerformScript('inventory.submitBFCalc', dataToSend);
+        } else {
+            console.log("FileMaker object not found. Running in browser.");
+            console.log("Simulating FileMaker.PerformScript('inventory.submitBFCalc',", dataToSend, ")");
+        }
+    });
+
+    cancelBtn.addEventListener('click', () => {
+        if (window.FileMaker) {
+            FileMaker.PerformScript('inventory.cancelBFCalc', 'true');
+        } else {
+            console.log("FileMaker object not found. Running in browser.");
+            console.log("Simulating FileMaker.PerformScript('inventory.cancelBFCalc', 'true')");
+        }
+    });
+
+    // Initial setup: Add the first row and set up initial button state
+    // NEW: Parse thickness from the hidden input when the page loads
+    const rawThicknessValue = nominalThicknessInput.value;
+    parsedThickness = parseFraction(rawThicknessValue);
+    thicknessDisplay.textContent = `Thickness: ${rawThicknessValue} (${parsedThickness.toFixed(2)} inches)`;
+
+    entryList.append(createRow(1));
+    yourNameInput.addEventListener('input', toggleSubmit);
+    toggleSubmit();
+    recalc(); // Call recalc initially to show correct total based on loaded thickness
+  </script>
+</body>
+</html>
