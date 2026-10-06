@@ -1,24 +1,20 @@
-/* InnerCider — Draft Email feature (purchase orders and work orders)
+/* InnerCider — Draft Email feature (purchase orders)
  *
  * Injects a "Draft Email w/ PDF" button immediately to the LEFT of the
- * existing "Export Custom PDF" button, which Innergy renders on both
- * purchase-order and work-order pages.
- *
- * The two document types differ in where the draft's contents come from:
- *   • purchase order — subject/body/recipient scraped from the page (PO number,
- *     vendor, vendor contact email, Materials grid), and the PO's own file
- *     attachments offered for inclusion.
- *   • work order — subject/body from Innergy's own WorkOrder/Project queries
- *     rather than the DOM, and recipients from the shared employee group named
- *     by WO_RECIPIENT_GROUP below. A WO page has no vendor and no Materials
- *     grid, so the PO scrapers would produce nonsense there.
+ * existing "Export Custom PDF" button on purchase-order pages. Innergy renders
+ * the same export button on work-order pages too; the button is deliberately
+ * not added there.
  *
  * When clicked it:
- *   1. Builds subject/body/recipients for whichever document type this is.
+ *   1. Scrapes subject/body/recipient from the page (PO number, vendor, vendor
+ *      contact email, Materials grid) and offers the PO's own file attachments
+ *      for inclusion.
  *   2. Asks the background worker to start watching for the next download.
  *   3. Arms the MAIN-world window.open hook (see export-capture-main.js).
- *   4. Clicks the real "Export Custom PDF" button.
- * Innergy's export ends in window.open(<pdf url>); the hook hands that URL
+ *   4. Clicks the real export button the user picked in Options: "Generate
+ *      PDF" (Innergy's standard PO PDF — the default) or "Export Custom PDF".
+ * Either export ends in window.open of the PDF's URL (directly, or via a blank
+ * tab it then navigates — see export-capture-main.js); the hook hands that URL
  * back here and we forward it to the background worker, which downloads it
  * and passes the file + subject/body to the native messaging host, which
  * creates the Mail draft. The URL path is what makes this work whether the
@@ -31,7 +27,45 @@
 
   const IC = window.InnerCider;
   const EXPORT_BTN_SELECTOR = 'button[data-testid="ExportCustomReportDefault_single"]';
+  const GENERATE_BTN_SELECTOR = 'button[data-testid="generate_pdf"]';
   const OUR_BTN_ID = "innercider-draft-email-btn";
+
+  // ---- PDF source setting --------------------------------------------------------
+  // Which Innergy button produces the attached PDF. Stored as `pdfSource` in
+  // chrome.storage.local by the Options page: "generate" (the default) or
+  // "custom". Cached here so the click handler can read it synchronously.
+
+  const PDF_SOURCES = {
+    generate: { label: "Generate PDF", find: () => document.querySelector(GENERATE_BTN_SELECTOR) },
+    custom: { label: "Export Custom PDF", find: () => document.querySelector(EXPORT_BTN_SELECTOR) },
+  };
+  const DEFAULT_PDF_SOURCE = "generate";
+  let pdfSource = DEFAULT_PDF_SOURCE;
+
+  chrome.storage.local.get("pdfSource", (data) => {
+    if (PDF_SOURCES[data.pdfSource]) pdfSource = data.pdfSource;
+  });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local" || !changes.pdfSource) return;
+    const next = changes.pdfSource.newValue;
+    pdfSource = PDF_SOURCES[next] ? next : DEFAULT_PDF_SOURCE;
+  });
+
+  // The button to click for this draft: the chosen source, falling back to the
+  // other one if Innergy isn't showing it, so the feature still produces a PDF.
+  function findSourceBtn() {
+    const chosen = PDF_SOURCES[pdfSource];
+    const btn = chosen.find();
+    if (btn) return { btn, label: chosen.label };
+    const otherKey = pdfSource === "generate" ? "custom" : "generate";
+    const other = PDF_SOURCES[otherKey];
+    const fallback = other.find();
+    if (fallback) {
+      IC.warn(`"${chosen.label}" button not found; using "${other.label}" instead.`);
+      return { btn: fallback, label: other.label };
+    }
+    return null;
+  }
 
   // ---- DOM scraping -----------------------------------------------------------
 
@@ -143,42 +177,6 @@
     return `${header}\n${lines.join("\n")}`;
   }
 
-  // ---- Work orders --------------------------------------------------------------
-
-  // The shared recipient list for work-order emails is the membership of this
-  // Innergy employee group (Human Resources → Employee Groups). It's a constant
-  // rather than a per-user setting on purpose: everyone's extension must read
-  // the same list, and membership is edited centrally in Innergy, so the list
-  // changes for everybody without anyone touching the extension. Only a rename
-  // of the group itself needs a change here.
-  const WO_RECIPIENT_GROUP = "Work Order Email List";
-
-  async function buildWorkOrderDraft() {
-    const info = await IC.innergy.fetchWorkOrderInfo();
-    if (!info) return null;
-
-    const title = [info.number, info.name].filter(Boolean).join(" - ") || "Work Order";
-    const project = [info.projectNumber, info.projectName].filter(Boolean).join(" ");
-    const url =
-      `https://app.innergy.com/#/projects/${info.projectId}` +
-      `/workOrder/${info.workOrderId}/details`;
-
-    const body =
-      `${title}\n` +
-      (project ? `Project: ${project}\n` : "") +
-      `\n${url}\n`;
-
-    const recipients = await IC.innergy.fetchEmployeeGroupEmails(WO_RECIPIENT_GROUP);
-    if (!recipients.length) {
-      IC.warn(
-        `No active members with an email address in the "${WO_RECIPIENT_GROUP}" ` +
-          "employee group; drafting without recipients."
-      );
-    }
-
-    return { subject: title, body, recipients, docNumber: info.number || "WO" };
-  }
-
   // Decide which files to attach from the innergyEmailAttach flag:
   //   yes -> attach, no -> skip, anything else -> ask the user.
   function categorizeFiles(files) {
@@ -240,11 +238,21 @@
   }
 
   function injectButton() {
-    const exportBtn = document.querySelector(EXPORT_BTN_SELECTOR);
-    if (!exportBtn) return;
+    // Purchase orders only — the same export button also appears on work-order
+    // pages. Remove ours if the SPA navigated away from a PO without replacing
+    // the toolbar.
+    if (!IC.innergy.getPoId()) {
+      document.getElementById(OUR_BTN_ID)?.remove();
+      return;
+    }
+    // Anchor on Export Custom PDF where it exists (the button's long-standing
+    // spot), else next to Generate PDF.
+    const anchor =
+      document.querySelector(EXPORT_BTN_SELECTOR) || document.querySelector(GENERATE_BTN_SELECTOR);
+    if (!anchor) return;
     if (document.getElementById(OUR_BTN_ID)) return; // already injected
-    const btn = makeButton(exportBtn);
-    exportBtn.parentElement.insertBefore(btn, exportBtn);
+    const btn = makeButton(anchor);
+    anchor.parentElement.insertBefore(btn, anchor);
   }
 
   // ---- Click handler ------------------------------------------------------------
@@ -253,11 +261,13 @@
     ev.preventDefault();
     ev.stopPropagation();
 
-    const exportBtn = document.querySelector(EXPORT_BTN_SELECTOR);
-    if (!exportBtn) {
-      alert("InnerCider: couldn't find the Export Custom PDF button.");
+    const source = findSourceBtn();
+    if (!source) {
+      alert(`InnerCider: couldn't find the ${PDF_SOURCES[pdfSource].label} button.`);
       return;
     }
+    const exportBtn = source.btn;
+    IC.log(`PDF source: ${source.label}`);
 
     const me = ev.currentTarget;
     const original = me.textContent;
@@ -267,36 +277,6 @@
       me.textContent = original;
       me.disabled = false;
     };
-
-    // Work orders take everything from Innergy's own queries and the shared
-    // employee group, and have no PO-style file attachments to offer.
-    if (IC.innergy.getWorkOrderIds()) {
-      me.textContent = "Preparing…";
-      const wo = await buildWorkOrderDraft();
-      if (!wo) {
-        resetButton();
-        alert("InnerCider: couldn't read this work order from Innergy.");
-        return;
-      }
-      IC.log("work order draft", {
-        subject: wo.subject,
-        recipients: wo.recipients.length,
-        group: WO_RECIPIENT_GROUP,
-      });
-      startDraft(
-        {
-          exportBtn,
-          subject: wo.subject,
-          body: wo.body,
-          recipients: wo.recipients,
-          docNumber: wo.docNumber,
-          me,
-          original,
-        },
-        []
-      );
-      return;
-    }
 
     const poNumber = getPoNumber();
     const vendor = getVendorName();
@@ -348,8 +328,7 @@
   }
 
   // Arm the background watcher and trigger the real export. `files` is the final
-  // list of { name, url } to attach alongside the exported PDF (always empty for
-  // work orders, which have no PO-style attachment picker).
+  // list of { name, url } to attach alongside the exported PDF.
   function startDraft(ctx, files) {
     const { exportBtn, subject, body, recipients, docNumber, me, original } = ctx;
     me.textContent = "Exporting…";

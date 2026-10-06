@@ -1,9 +1,13 @@
 /* InnerCider — MAIN-world capture of the exported PDF's URL
  *
- * Innergy's "Export Custom PDF" button (PO pages and work-order pages alike)
- * ends in a bare
- *   window.open("https://…blob.core.windows.net/…/PO-100005_….pdf?…&sig=…")
- * — an Azure blob URL with a SAS token, plain GET, no Content-Disposition.
+ * Both PO export buttons end by opening an Azure blob URL with a SAS token
+ * (plain GET, no Content-Disposition), just in two different shapes:
+ *   • "Export Custom PDF" — a bare
+ *       window.open("https://…blob.core.windows.net/…/PO-100005_….pdf?…&sig=…")
+ *   • "Generate PDF" — builds the PDF in the page, POSTs it to
+ *     Purchasing/PurchaseOrders/SavePdf (skipped when nothing changed since
+ *     the last one), then opens a blank tab and points it at the saved copy:
+ *       const w = window.open("", "_blank"); w.location.href = "https://…PO-100009_<timestamp>.pdf?…&sig=…"
  * What Chrome does with that depends on the user's PDF setting: "Download
  * PDFs" produces a download, "Open PDFs in Chrome" renders it in a new tab and
  * no download ever happens. draft-email.js used to rely solely on the download
@@ -56,19 +60,60 @@
 
   const originalOpen = window.open;
 
-  window.open = function (url) {
-    if (Date.now() < armedUntil && typeof url === "string" && isPdfUrl(url)) {
-      armedUntil = 0; // one capture per arm
-      window.postMessage(
-        { source: "innercider-main", type: "EXPORT_PDF_URL", url },
-        location.origin
-      );
-      // Innergy ignores the return value, but returning null would break any
-      // caller that does `w.focus()`. Hand back an inert stand-in instead.
-      return new Proxy(
-        {},
-        { get: (_t, prop) => (prop === "closed" ? false : prop === "then" ? undefined : () => {}) }
-      );
+  function capture(url) {
+    armedUntil = 0; // one capture per arm
+    window.postMessage({ source: "innercider-main", type: "EXPORT_PDF_URL", url }, location.origin);
+  }
+
+  // Innergy ignores the return value, but returning null would break any
+  // caller that does `w.focus()`. Hand back an inert stand-in instead.
+  function inertWindow() {
+    return new Proxy(
+      {},
+      { get: (_t, prop) => (prop === "closed" ? false : prop === "then" ? undefined : () => {}) }
+    );
+  }
+
+  // Stand-in for the blank tab "Generate PDF" opens before navigating it. The
+  // PDF URL is captured when it's assigned; anything else gets the real tab it
+  // asked for, opened late (the popup blocker may object, but nothing we armed
+  // for is ever lost to that).
+  function deferredWindow(target, features) {
+    const navigate = (next) => {
+      const url = String(next);
+      if (Date.now() < armedUntil && isPdfUrl(url)) capture(url);
+      else originalOpen.call(window, url, target, features);
+    };
+    const loc = {
+      assign: navigate,
+      replace: navigate,
+      get href() {
+        return "about:blank";
+      },
+      set href(next) {
+        navigate(next);
+      },
+    };
+    return new Proxy(
+      {},
+      {
+        get: (_t, prop) =>
+          prop === "location" ? loc : prop === "closed" ? false : prop === "then" ? undefined : () => {},
+        set: (_t, prop, value) => {
+          if (prop === "location") navigate(value);
+          return true;
+        },
+      }
+    );
+  }
+
+  window.open = function (url, target, features) {
+    if (Date.now() < armedUntil) {
+      if (typeof url === "string" && isPdfUrl(url)) {
+        capture(url);
+        return inertWindow();
+      }
+      if (url == null || url === "" || url === "about:blank") return deferredWindow(target, features);
     }
     // Everything else — label PDFs included — goes through untouched.
     return originalOpen.apply(window, arguments);

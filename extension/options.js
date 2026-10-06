@@ -83,6 +83,22 @@ document.querySelectorAll('input[name="mailApp"]').forEach((input) => {
   });
 });
 
+// Which Innergy button produces the PO email's PDF. Default must match
+// DEFAULT_PDF_SOURCE in content/features/draft-email.js.
+const DEFAULT_PDF_SOURCE = "generate";
+chrome.storage.local.get("pdfSource", (data) => {
+  const input =
+    document.querySelector(`input[name="pdfSource"][value="${data.pdfSource}"]`) ||
+    document.querySelector(`input[name="pdfSource"][value="${DEFAULT_PDF_SOURCE}"]`);
+  input.checked = true;
+});
+document.querySelectorAll('input[name="pdfSource"]').forEach((input) => {
+  input.addEventListener("change", (e) => {
+    chrome.storage.local.set({ pdfSource: e.target.value });
+    showSaved();
+  });
+});
+
 // Save client ID as the user types (debounced).
 let saveTimer;
 document.getElementById("client-id").addEventListener("input", (e) => {

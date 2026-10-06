@@ -47,9 +47,8 @@ which runs in the page's MAIN world because it has to patch the page's own
 `window.open` — it shares a global scope with Innergy's bundle and can't see
 `window.InnerCider`. Don't add anything there without that same forcing reason.
 
-If you need Innergy data — a PO's files, a work order's number and project, an
-employee group's members — use `IC.innergy.*` rather than writing your own
-`fetch`. If your feature needs something the shared layer doesn't have yet, add
+If you need Innergy data — such as a PO's files — use `IC.innergy.*` rather
+than writing your own `fetch`. If your feature needs something the shared layer doesn't have yet, add
 it to `content/core.js`'s `innergy` object (there's a generic `runQuery` to
 build on) so the next feature can reuse it too.
 

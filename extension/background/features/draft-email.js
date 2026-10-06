@@ -1,13 +1,14 @@
 /* InnerCider — background: Draft PO Email feature
  *
- * Gets the PDF that the content script triggered via "Export Custom PDF" onto
+ * Gets the PDF that the content script triggered ("Generate PDF" or "Export
+ * Custom PDF", per the Options setting) onto
  * disk, then forwards its path plus the email subject/body/recipient to the
  * native messaging host (com.innergy.mailer), which drafts the email in the
  * user's chosen mail app.
  *
  * Two ways the PDF arrives, both ending in deliver():
  *   • EXPORT_PDF_URL — the normal path. The content script's MAIN-world hook
- *     caught Innergy's window.open(<pdf url>) and handed us the URL, so we
+ *     caught the PDF URL Innergy opens via window.open and handed it over, so we
  *     fetch it ourselves with chrome.downloads.download(). That works under
  *     either Chrome PDF setting, because the "open PDFs in Chrome" preference
  *     governs navigations, not the downloads API.
@@ -37,8 +38,8 @@ function isPdf(item) {
   return !!item.filename && /\.pdf$/i.test(item.filename);
 }
 
-// Best-effort log detail: did the filename include the exact PO / work-order
-// number? (Innergy's export names it e.g. PO-100005_INNERGYDefault_….pdf, but a
+// Best-effort log detail: did the filename include the exact PO number?
+// (Innergy's export names it e.g. PO-100005_INNERGYDefault_….pdf, but a
 // report layout could name it otherwise — informational only, never a gate.)
 function filenameContainsDocNumber(docNumber, path) {
   if (!path || !docNumber) return false;
@@ -149,7 +150,7 @@ export async function handleExportPdfUrl(msg, sender, sendResponse) {
 
   try {
     // No filename: Chrome derives it from the URL path, which already carries
-    // the PO / work-order number (e.g. PO-100005_INNERGYDefault_….pdf).
+    // the PO number (e.g. PO-100005_INNERGYDefault_….pdf).
     const path = await downloadAndWait(msg.url);
     if (!path) throw new Error("download produced no file");
     await deliver(path, pending);
