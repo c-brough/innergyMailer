@@ -15,18 +15,34 @@ NOTE: stdout is reserved for the native-messaging protocol. All diagnostics go
 to host.log beside this script, never to stdout.
 """
 
+import io
 import json
 import os
 import re
+import shutil
 import struct
 import sys
+import tempfile
 import traceback
+import urllib.request
+import zipfile
 
 if getattr(sys, "frozen", False):
     _BASE = os.path.dirname(sys.executable)
 else:
     _BASE = os.path.dirname(os.path.abspath(__file__))
 LOG_PATH = os.path.join(_BASE, "host.log")
+
+# --- Self-update -------------------------------------------------------------
+# Download the latest extension/ from the public repo and overwrite the unpacked
+# folder; the Options page then reloads the extension. On Windows the host .exe
+# does NOT live beside the extension (which the installer copies to
+# %ProgramFiles%\InnerCider or %LOCALAPPDATA%\InnerCider), so search those.
+GITHUB_REPO = "c-brough/innergyMailer"
+EXTRA_EXTENSION_DIRS = [
+    os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"), "InnerCider", "extension"),
+    os.path.join(os.environ.get("LOCALAPPDATA", ""), "InnerCider", "extension"),
+]
 
 
 def log(message):
@@ -51,6 +67,60 @@ def send_message(obj):
     sys.stdout.buffer.write(struct.pack("<I", len(encoded)))
     sys.stdout.buffer.write(encoded)
     sys.stdout.buffer.flush()
+
+
+def _extension_target():
+    candidates = [os.path.join(_BASE, "extension")] + list(EXTRA_EXTENSION_DIRS)
+    for c in candidates:
+        if c and os.path.isfile(os.path.join(c, "manifest.json")):
+            return c
+    # Prefer a real install location over the host's own folder when nothing
+    # has a manifest yet.
+    return next((c for c in EXTRA_EXTENSION_DIRS if c), candidates[0])
+
+
+def update_extension(branch):
+    """Download extension/ for `branch` and replace the installed folder. Returns
+    the new version string."""
+    branch = (branch or "main").strip()
+    if not re.match(r"^[A-Za-z0-9._/\-]+$", branch):
+        raise ValueError("invalid branch name")
+    target = _extension_target()
+    url = "https://codeload.github.com/%s/zip/refs/heads/%s" % (GITHUB_REPO, branch)
+    log("update: downloading %s -> %s" % (url, target))
+    req = urllib.request.Request(url, headers={"User-Agent": "InnerCider-Updater"})
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        blob = resp.read()
+    zf = zipfile.ZipFile(io.BytesIO(blob))
+    tmp = tempfile.mkdtemp(prefix="innercider-upd-")
+    try:
+        zf.extractall(tmp)
+        tops = [n for n in os.listdir(tmp) if os.path.isdir(os.path.join(tmp, n))]
+        if not tops:
+            raise RuntimeError("empty download")
+        src_ext = os.path.join(tmp, tops[0], "extension")
+        if not os.path.isdir(src_ext):
+            raise RuntimeError("no extension/ folder in the download")
+        with open(os.path.join(src_ext, "manifest.json"), "r", encoding="utf-8") as fh:
+            new_version = json.load(fh).get("version")
+        parent = os.path.dirname(target) or "."
+        os.makedirs(parent, exist_ok=True)
+        backup = target + ".bak"
+        if os.path.isdir(backup):
+            shutil.rmtree(backup, ignore_errors=True)
+        if os.path.isdir(target):
+            os.rename(target, backup)
+        try:
+            shutil.move(src_ext, target)
+        except Exception:
+            if os.path.isdir(backup) and not os.path.isdir(target):
+                os.rename(backup, target)
+            raise
+        shutil.rmtree(backup, ignore_errors=True)
+        log("update: now at v%s" % new_version)
+        return new_version
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def _mapi_send(subject, body, to, attachments):
@@ -453,6 +523,15 @@ def main():
     try:
         msg = read_message()
         if msg is None:
+            return
+
+        if msg.get("action") == "update":
+            try:
+                version = update_extension(msg.get("branch"))
+                send_message({"ok": True, "version": version})
+            except Exception as exc:
+                log("ERROR update: " + traceback.format_exc())
+                send_message({"ok": False, "error": str(exc)})
             return
 
         if msg.get("action") == "auth_start":

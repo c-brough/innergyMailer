@@ -18,11 +18,13 @@ import {
   handleCompletedDownload,
 } from "./features/draft-email.js";
 import { handleGraphAuth } from "./features/graph-auth.js";
+import { handleUpdateExtension } from "./features/update.js";
 
 const handlers = {
   EXPORT_AND_MAIL: handleExportAndMail,
   EXPORT_PDF_URL: handleExportPdfUrl,
   GRAPH_AUTH: handleGraphAuth,
+  UPDATE_EXTENSION: handleUpdateExtension,
 };
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {

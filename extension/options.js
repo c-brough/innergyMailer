@@ -283,3 +283,190 @@ ttBox.addEventListener("change", (e) => {
 
   search.addEventListener("input", apply);
 })();
+
+// ---- Updates (check GitHub, show changelog, one-click update) -----------------
+// The extension is loaded unpacked from a fixed folder the native host can write
+// to, so "Update now" = ask the host to download the latest from GitHub, then
+// chrome.runtime.reload() to pick up the new files. The check + changelog are
+// plain fetches against the public repo (no auth).
+(() => {
+  const REPO = "c-brough/innergyMailer";
+  const DEFAULT_BRANCH = "main";
+  const RAW = (branch, path) =>
+    `https://raw.githubusercontent.com/${REPO}/${encodeURIComponent(branch)}/${path}?t=${Date.now()}`;
+
+  const installed = chrome.runtime.getManifest().version;
+  const banner = document.getElementById("update-banner");
+  const ubVersions = document.getElementById("ub-versions");
+  const ubUpdate = document.getElementById("ub-update");
+  const ubChangelog = document.getElementById("ub-changelog");
+  const updateStatus = document.getElementById("update-status");
+  const branchSel = document.getElementById("update-branch");
+  const checkNow = document.getElementById("check-now");
+  const viewChangelog = document.getElementById("view-changelog");
+  const updatesStatus = document.getElementById("updates-status");
+  const updTag = document.getElementById("upd-tag");
+  document.getElementById("installed-version").textContent = "v" + installed;
+
+  let currentBranch = DEFAULT_BRANCH;
+  let latestVersion = null;
+
+  // "1.8.0" > "1.7.1" by numeric segments.
+  function semverGt(a, b) {
+    const pa = String(a).split(".").map((n) => parseInt(n, 10) || 0);
+    const pb = String(b).split(".").map((n) => parseInt(n, 10) || 0);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      if ((pa[i] || 0) > (pb[i] || 0)) return true;
+      if ((pa[i] || 0) < (pb[i] || 0)) return false;
+    }
+    return false;
+  }
+
+  async function fetchText(url, ms) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), ms || 10000);
+    try {
+      const r = await fetch(url, { signal: ctrl.signal, cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return await r.text();
+    } finally { clearTimeout(t); }
+  }
+
+  async function populateBranches() {
+    try {
+      const txt = await fetchText(`https://api.github.com/repos/${REPO}/branches?per_page=100`, 10000);
+      const names = JSON.parse(txt).map((b) => b.name);
+      if (!names.includes(currentBranch)) names.unshift(currentBranch);
+      branchSel.innerHTML = "";
+      for (const n of names) {
+        const o = document.createElement("option");
+        o.value = n; o.textContent = n; if (n === currentBranch) o.selected = true;
+        branchSel.appendChild(o);
+      }
+    } catch (e) {
+      // Fall back to just the stored/default branch if the API is unreachable.
+      branchSel.innerHTML = "";
+      const o = document.createElement("option");
+      o.value = currentBranch; o.textContent = currentBranch; o.selected = true;
+      branchSel.appendChild(o);
+    }
+  }
+
+  async function check(quiet) {
+    if (!quiet) updatesStatus.textContent = "Checking…";
+    try {
+      const txt = await fetchText(RAW(currentBranch, "extension/manifest.json"), 10000);
+      latestVersion = JSON.parse(txt).version;
+      updTag.textContent = "v" + latestVersion;
+      if (semverGt(latestVersion, installed)) {
+        ubVersions.textContent = `v${installed} → v${latestVersion} (${currentBranch})`;
+        banner.classList.add("show");
+        updatesStatus.textContent = `Update available: v${latestVersion}.`;
+      } else {
+        banner.classList.remove("show");
+        updatesStatus.textContent = semverGt(installed, latestVersion)
+          ? `You're ahead of ${currentBranch} (installed v${installed}, branch v${latestVersion}).`
+          : `Up to date (v${installed}).`;
+      }
+    } catch (e) {
+      banner.classList.remove("show");
+      updatesStatus.textContent = "Couldn't check for updates: " + e.message;
+    }
+  }
+
+  // ---- changelog modal ----
+  const clOverlay = document.getElementById("cl-overlay");
+  const clBody = document.getElementById("cl-body");
+  document.getElementById("cl-close").addEventListener("click", () => clOverlay.classList.remove("show"));
+  clOverlay.addEventListener("click", (e) => { if (e.target === clOverlay) clOverlay.classList.remove("show"); });
+
+  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const inlineCode = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>");
+
+  // Parse "## [x.y.z] - date" sections into { version, date, body }.
+  function parseChangelog(md) {
+    const out = [];
+    const re = /^##\s*\[([0-9][0-9.]*)\]\s*-?\s*(.*)$/gm;
+    let m, prev = null;
+    while ((m = re.exec(md))) {
+      if (prev) prev.body = md.slice(prev._end, m.index).trim();
+      prev = { version: m[1], date: (m[2] || "").trim(), _end: re.lastIndex };
+      out.push(prev);
+    }
+    if (prev) prev.body = md.slice(prev._end).trim();
+    return out;
+  }
+
+  function renderEntry(e) {
+    let html = `<h3>v${esc(e.version)}${e.date ? " — " + esc(e.date) : ""}</h3>`;
+    let inList = false;
+    for (const raw of e.body.split("\n")) {
+      const line = raw.trimEnd();
+      const h = line.match(/^###\s+(.*)$/);
+      const li = line.match(/^[-*]\s+(.*)$/);
+      if (h) { if (inList) { html += "</ul>"; inList = false; } html += `<div class="cl-kind">${esc(h[1])}</div>`; }
+      else if (li) { if (!inList) { html += "<ul>"; inList = true; } html += `<li>${inlineCode(li[1])}</li>`; }
+      else if (line && !inList) { html += `<div>${inlineCode(line)}</div>`; }
+    }
+    if (inList) html += "</ul>";
+    return html;
+  }
+
+  async function showChangelog(onlyNewer) {
+    clBody.innerHTML = "Loading…";
+    clOverlay.classList.add("show");
+    try {
+      const md = await fetchText(RAW(currentBranch, "CHANGELOG.md"), 10000);
+      let entries = parseChangelog(md);
+      if (onlyNewer) {
+        const newer = entries.filter((e) => semverGt(e.version, installed));
+        if (newer.length) entries = newer;
+      }
+      entries = entries.slice(0, 20);
+      clBody.innerHTML = entries.length ? entries.map(renderEntry).join("") : "No changelog entries found.";
+    } catch (e) {
+      clBody.innerHTML = "Couldn't load the changelog: " + esc(e.message);
+    }
+  }
+
+  // ---- update now ----
+  function doUpdate() {
+    ubUpdate.disabled = true;
+    updateStatus.textContent = "Downloading the latest version…";
+    chrome.runtime.sendMessage({ type: "UPDATE_EXTENSION", branch: currentBranch }, (resp) => {
+      if (chrome.runtime.lastError || !resp) {
+        ubUpdate.disabled = false;
+        updateStatus.textContent = "Couldn't reach the updater. Re-run the installer to enable one-click updates.";
+        return;
+      }
+      if (resp.transportError) {
+        ubUpdate.disabled = false;
+        updateStatus.textContent = "Update helper not reachable — re-run the installer once to enable one-click updates.";
+        return;
+      }
+      if (resp.ok) {
+        updateStatus.textContent = `Updated to v${resp.version || latestVersion}. Reloading…`;
+        setTimeout(() => chrome.runtime.reload(), 900);
+      } else {
+        ubUpdate.disabled = false;
+        updateStatus.textContent = "Update failed: " + (resp.error || "unknown error");
+      }
+    });
+  }
+
+  ubUpdate.addEventListener("click", doUpdate);
+  ubChangelog.addEventListener("click", () => showChangelog(true));
+  viewChangelog.addEventListener("click", () => showChangelog(false));
+  checkNow.addEventListener("click", () => check(false));
+  branchSel.addEventListener("change", () => {
+    currentBranch = branchSel.value;
+    chrome.storage.local.set({ updateBranch: currentBranch });
+    check(false);
+  });
+
+  chrome.storage.local.get("updateBranch", async (data) => {
+    currentBranch = data.updateBranch || DEFAULT_BRANCH;
+    await populateBranches();
+    check(true);
+  });
+})();

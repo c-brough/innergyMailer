@@ -15,15 +15,83 @@ NOTE: stdout is reserved for the native-messaging protocol. All diagnostics go
 to the log file beside this script, never to stdout.
 """
 
+import io
 import json
 import os
 import re
+import shutil
 import struct
 import subprocess
 import sys
+import tempfile
 import traceback
+import urllib.request
+import zipfile
 
 LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "host.log")
+
+# --- Self-update -------------------------------------------------------------
+# The Options page can't rewrite the extension's own files, so it asks this host
+# to download the latest extension/ from the public repo and overwrite the
+# unpacked folder; the page then reloads the extension.
+GITHUB_REPO = "c-brough/innergyMailer"
+# Candidate locations of the loaded (unpacked) extension folder, most-likely
+# first. On macOS the host is installed beside the extension in
+# ~/Library/Application Support/InnerCider/, so dirname(host)/extension is it.
+EXTRA_EXTENSION_DIRS = []
+
+
+def _extension_target():
+    here = os.path.dirname(os.path.abspath(__file__))
+    candidates = [os.path.join(here, "extension")] + list(EXTRA_EXTENSION_DIRS)
+    for c in candidates:
+        if c and os.path.isfile(os.path.join(c, "manifest.json")):
+            return c
+    return candidates[0]
+
+
+def update_extension(branch):
+    """Download extension/ for `branch` from GitHub and replace the installed
+    folder in place. Returns the new version string."""
+    branch = (branch or "main").strip()
+    if not re.match(r"^[A-Za-z0-9._/\-]+$", branch):
+        raise ValueError("invalid branch name")
+    target = _extension_target()
+    url = "https://codeload.github.com/%s/zip/refs/heads/%s" % (GITHUB_REPO, branch)
+    log("update: downloading %s -> %s" % (url, target))
+    req = urllib.request.Request(url, headers={"User-Agent": "InnerCider-Updater"})
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        blob = resp.read()
+    zf = zipfile.ZipFile(io.BytesIO(blob))
+    tmp = tempfile.mkdtemp(prefix="innercider-upd-")
+    try:
+        zf.extractall(tmp)
+        tops = [n for n in os.listdir(tmp) if os.path.isdir(os.path.join(tmp, n))]
+        if not tops:
+            raise RuntimeError("empty download")
+        src_ext = os.path.join(tmp, tops[0], "extension")
+        if not os.path.isdir(src_ext):
+            raise RuntimeError("no extension/ folder in the download")
+        with open(os.path.join(src_ext, "manifest.json"), "r", encoding="utf-8") as fh:
+            new_version = json.load(fh).get("version")
+        parent = os.path.dirname(target) or "."
+        os.makedirs(parent, exist_ok=True)
+        backup = target + ".bak"
+        if os.path.isdir(backup):
+            shutil.rmtree(backup, ignore_errors=True)
+        if os.path.isdir(target):
+            os.rename(target, backup)          # keep the old copy until the swap succeeds
+        try:
+            shutil.move(src_ext, target)
+        except Exception:
+            if os.path.isdir(backup) and not os.path.isdir(target):
+                os.rename(backup, target)      # roll back
+            raise
+        shutil.rmtree(backup, ignore_errors=True)
+        log("update: now at v%s" % new_version)
+        return new_version
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 # Each script takes argv:
 #   1=subject, 2=body, 3=recipient count N, 4..(3+N)=recipient addresses,
@@ -172,6 +240,14 @@ def main():
     try:
         msg = read_message()
         if msg is None:
+            return
+        if msg.get("action") == "update":
+            try:
+                version = update_extension(msg.get("branch"))
+                send_message({"ok": True, "version": version})
+            except Exception as exc:
+                log("ERROR update: " + traceback.format_exc())
+                send_message({"ok": False, "error": str(exc)})
             return
         # Prefer the multi-file `attachments` list; fall back to single pdfPath.
         attachments = msg.get("attachments")

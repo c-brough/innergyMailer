@@ -113,16 +113,85 @@
         border: 1px solid #ddd; border-radius: 3px; padding: 1px 5px;
         vertical-align: 1px;
       }
+
+      /* ---- Updates banner + section ------------------------------------- */
+      #update-banner {
+        display: none; margin: 14px 0 4px; padding: 12px 14px; border-radius: 10px;
+        background: #eaf5ec; border: 1px solid #bfe0c6; color: #1f5130; font-size: 13.5px;
+      }
+      #update-banner.show { display: block; }
+      #update-banner .ub-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+      #update-banner button { padding: 6px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; }
+      #ub-update { background: #1f9d57; color: #fff; }
+      #ub-update:disabled { opacity: .6; cursor: default; }
+      #ub-changelog { background: #fff; color: #1a56db; border: 1px solid #c7d0f8; }
+      #update-status { font-size: 12px; margin-top: 6px; min-height: 0; color: #3a5a44; }
+      #update-status:empty { margin-top: 0; }
+      .upd-row { display: flex; align-items: center; gap: 10px; margin: 8px 0; flex-wrap: wrap; }
+      .upd-row label { font-size: 13px; color: #333; }
+      #update-branch { font: 13px -apple-system, system-ui, sans-serif; padding: 5px 8px; border: 1px solid #ccc; border-radius: 6px; }
+      #check-now, #view-changelog { padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+      #check-now { background: #1a56db; color: #fff; border: none; }
+      #view-changelog { background: #fff; color: #1a56db; border: 1px solid #c7d0f8; }
+      #updates-status { font-size: 12px; color: #555; min-height: 16px; }
+
+      /* Changelog modal */
+      #cl-overlay {
+        display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45);
+        align-items: center; justify-content: center; z-index: 9999;
+      }
+      #cl-overlay.show { display: flex; }
+      #cl-card {
+        background: #fff; border-radius: 10px; padding: 18px 20px; width: 480px;
+        max-width: 92vw; max-height: 82vh; overflow: auto; box-shadow: 0 8px 30px rgba(0,0,0,.3);
+      }
+      #cl-card h2 { font-size: 16px; margin: 0 0 10px; }
+      #cl-card h3 { font-size: 13.5px; margin: 14px 0 4px; color: #1a56db; }
+      #cl-card h3:first-of-type { margin-top: 0; }
+      #cl-card ul { margin: 2px 0 8px 18px; padding: 0; }
+      #cl-card li { margin-bottom: 3px; font-size: 13px; line-height: 1.45; }
+      #cl-card .cl-kind { font-weight: 700; font-size: 12px; color: #555; margin-top: 6px; }
+      #cl-card code { background: #f0f0f0; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+      #cl-close { margin-top: 14px; padding: 8px 14px; border: 1px solid #ccc; background: #f3f3f3; border-radius: 6px; cursor: pointer; font-weight: 600; float: right; }
     </style>
   </head>
   <body>
     <h1>InnerCider</h1>
     <p class="sub">Settings for the Innergy tools.</p>
 
+    <!-- Shown by options.js when a newer version is on GitHub. -->
+    <div id="update-banner">
+      <div class="ub-row">
+        <span>🚀 <strong>Update available</strong>&nbsp;<span id="ub-versions"></span></span>
+        <span style="flex: 1"></span>
+        <button id="ub-changelog" type="button">View changes</button>
+        <button id="ub-update" type="button">Update now</button>
+      </div>
+      <div id="update-status"></div>
+    </div>
+
     <div class="search-wrap">
       <input id="opt-search" type="search" placeholder="Search settings…" autocomplete="off" />
     </div>
     <p id="no-results">No settings match that search.</p>
+
+    <!-- ===== Updates =============================================== -->
+    <details class="cat" data-cat="updates">
+      <summary>Updates <span class="cat-tag" id="upd-tag">v—</span></summary>
+      <div class="cat-body">
+        <p class="fs-note">
+          Installed version: <strong id="installed-version">—</strong>. InnerCider checks
+          GitHub for newer versions and can update in one click.
+        </p>
+        <div class="upd-row">
+          <label for="update-branch">Track branch:</label>
+          <select id="update-branch"></select>
+          <button id="check-now" type="button">Check now</button>
+          <button id="view-changelog" type="button">View changelog</button>
+        </div>
+        <div id="updates-status"></div>
+      </div>
+    </details>
 
     <!-- ===== Mail app =============================================== -->
     <details class="cat" data-cat="mail" open>
@@ -277,6 +346,15 @@
     </details>
 
     <div id="status"></div>
+
+    <!-- Changelog modal (populated by options.js). -->
+    <div id="cl-overlay">
+      <div id="cl-card">
+        <h2>What's new</h2>
+        <div id="cl-body"></div>
+        <button id="cl-close" type="button">Close</button>
+      </div>
+    </div>
 
     <script src="options.js"></script>
   </body>
