@@ -74,6 +74,21 @@
     if (area === "local" && changes.mailApp) mailApp = changes.mailApp.newValue || "";
   });
 
+  // ---- Feature enable (opt-in) ----------------------------------------------------
+  // The "Draft Email w/ PDF" button only appears when the PO email feature is
+  // turned on in Options (poEmailEnabled). Off by default.
+  let poEmailEnabled = false;
+  chrome.storage.local.get("poEmailEnabled", (data) => {
+    poEmailEnabled = data.poEmailEnabled === true;
+    injectButton();
+  });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && changes.poEmailEnabled) {
+      poEmailEnabled = changes.poEmailEnabled.newValue === true;
+      injectButton();
+    }
+  });
+
   // The button to click for this draft: the chosen source, falling back to the
   // other one if Innergy isn't showing it, so the feature still produces a PDF.
   function findSourceBtn() {
@@ -329,6 +344,11 @@
   }
 
   function injectButton() {
+    // Opt-in: no button unless the feature is enabled in Options.
+    if (!poEmailEnabled) {
+      document.getElementById(OUR_BTN_ID)?.remove();
+      return;
+    }
     // Purchase orders only — the same export button also appears on work-order
     // pages. Remove ours if the SPA navigated away from a PO without replacing
     // the toolbar.

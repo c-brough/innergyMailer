@@ -106,6 +106,17 @@ document.querySelectorAll('input[name="pdfSource"]').forEach((input) => {
   });
 });
 
+// PO email feature enable (opt-in). Off by default; the content script only adds
+// the "Draft Email w/ PDF" button when this is on.
+const poEnabledBox = document.getElementById("po-email-enabled");
+chrome.storage.local.get("poEmailEnabled", (data) => {
+  poEnabledBox.checked = data.poEmailEnabled === true;
+});
+poEnabledBox.addEventListener("change", (e) => {
+  chrome.storage.local.set({ poEmailEnabled: e.target.checked });
+  showSaved();
+});
+
 // Include line-item pricing (extended cost) in the PO email body. Off by default.
 const pricingBox = document.getElementById("include-pricing");
 chrome.storage.local.get("includePricing", (data) => {
@@ -281,7 +292,7 @@ ttBox.addEventListener("change", (e) => {
 // ---- Settings search ---------------------------------------------------------
 // Filters the collapsible categories: a query shows only the categories whose
 // text matches, opens them, and scrolls the first match into view. Clearing
-// restores the default (first category open, the rest collapsed).
+// restores the default (all collapsed).
 (() => {
   const search = document.getElementById("opt-search");
   const noResults = document.getElementById("no-results");
@@ -497,4 +508,76 @@ ttBox.addEventListener("change", (e) => {
     await populateBranches();
     check(true);
   });
+})();
+
+// ---- Category status (green = in use) + expand/collapse all -------------------
+// A green dot + soft tint on a category whose feature is enabled/configured, so
+// you can see what's in use while everything is collapsed.
+(() => {
+  const cats = Array.from(document.querySelectorAll("details.cat"));
+  // Prepend a status dot to each summary (the ▸ triangle is a ::before pseudo,
+  // so it still renders first).
+  cats.forEach((c) => {
+    const summary = c.querySelector("summary");
+    if (summary && !summary.querySelector(".cat-dot")) {
+      const dot = document.createElement("span");
+      dot.className = "cat-dot";
+      summary.insertBefore(dot, summary.firstChild);
+    }
+  });
+
+  // The Mail app is only meaningful once a compose email feature is on, so move
+  // it to the end of the feature list and gray it out until PO email is enabled.
+  const mailCat = document.querySelector('details.cat[data-cat="mail"]');
+  const ttCat = document.querySelector('details.cat[data-cat="time-tracking"]');
+  const mailNote = document.getElementById("mail-disabled-note");
+  if (mailCat && ttCat) ttCat.after(mailCat);
+  // Block expanding Mail app while it's disabled.
+  if (mailCat) {
+    const sum = mailCat.querySelector("summary");
+    if (sum) sum.addEventListener("click", (e) => { if (mailCat.classList.contains("cat--disabled")) e.preventDefault(); });
+  }
+
+  // A "compose email" feature is enabled (today: PO email) — the only thing that
+  // makes the mail-app choice relevant.
+  const composeOn = (data) => data.poEmailEnabled === true;
+
+  // Is this category configured / in use? Keyed by data-cat.
+  function isOn(cat, data) {
+    switch (cat.dataset.cat) {
+      case "mail": return composeOn(data) && !!data.mailApp;
+      case "po-email": return data.poEmailEnabled === true;
+      case "bom": return !!(data.bomBaseUrl && data.bomBaseUrl.trim());
+      case "time-tracking": return data.timeTrackingEnabled === true;
+      default: return false;                     // Updates: neutral
+    }
+  }
+  function refresh() {
+    chrome.storage.local.get(["mailApp", "poEmailEnabled", "bomBaseUrl", "timeTrackingEnabled"], (data) => {
+      cats.forEach((c) => c.classList.toggle("cat--on", isOn(c, data)));
+      // Mail app gating.
+      if (mailCat) {
+        const enabled = composeOn(data);
+        mailCat.classList.toggle("cat--disabled", !enabled);
+        if (!enabled) mailCat.open = false;
+        if (mailNote) mailNote.style.display = enabled ? "none" : "block";
+      }
+    });
+  }
+  refresh();
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && (changes.mailApp || changes.poEmailEnabled || changes.bomBaseUrl || changes.timeTrackingEnabled)) refresh();
+  });
+
+  // Expand / collapse all (only categories currently shown; never expand a
+  // disabled one).
+  const setAll = (open) => cats.forEach((c) => {
+    if (c.hidden) return;
+    if (open && c.classList.contains("cat--disabled")) return;
+    c.open = open;
+  });
+  const ea = document.getElementById("expand-all");
+  const ca = document.getElementById("collapse-all");
+  if (ea) ea.addEventListener("click", () => setAll(true));
+  if (ca) ca.addEventListener("click", () => setAll(false));
 })();

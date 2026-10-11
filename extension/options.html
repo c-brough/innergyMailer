@@ -47,6 +47,30 @@
       }
       .cat-body { padding: 2px 14px 12px; }
 
+      /* Green "in use" indicator: a dot in the summary + a soft green card tint,
+         so enabled/configured features are obvious while collapsed. */
+      .cat-dot {
+        width: 9px; height: 9px; border-radius: 50%; background: #cfd5db;
+        flex: 0 0 auto; transition: background .15s ease, box-shadow .15s ease;
+      }
+      details.cat.cat--on { border-color: #bfe0c6; background: #f4faf5; }
+      details.cat.cat--on > summary .cat-dot { background: #2e9e5b; box-shadow: 0 0 0 3px rgba(46,158,91,.18); }
+      details.cat.cat--on > summary .cat-tag { color: #2e7d32; background: #eaf5ec; border-color: #bfe0c6; }
+
+      /* A category disabled because its prerequisite feature is off. */
+      details.cat.cat--disabled { opacity: .5; background: #f6f6f6; }
+      details.cat.cat--disabled > summary { cursor: not-allowed; }
+      details.cat.cat--disabled > summary .cat-dot { background: #cfd5db; box-shadow: none; }
+      #mail-disabled-note { display: none; color: #8a6d3b; font-size: 12.5px; margin: 2px 0 4px; }
+
+      /* Expand/collapse all */
+      .cat-tools { display: flex; gap: 14px; margin: 0 2px 10px; }
+      .cat-tools button {
+        background: none; border: none; padding: 0; cursor: pointer;
+        font: 12.5px -apple-system, system-ui, sans-serif; color: #1a56db;
+      }
+      .cat-tools button:hover { text-decoration: underline; }
+
       /* Inside a category, fieldsets are borderless subsections. */
       fieldset { border: none; padding: 6px 0 0; margin: 0 0 10px; }
       legend { font-weight: 600; padding: 0; font-size: 13px; color: #333; }
@@ -182,6 +206,10 @@
     <div class="search-wrap">
       <input id="opt-search" type="search" placeholder="Search settings…" autocomplete="off" />
     </div>
+    <div class="cat-tools">
+      <button id="expand-all" type="button">Expand all</button>
+      <button id="collapse-all" type="button">Collapse all</button>
+    </div>
     <p id="no-results">No settings match that search.</p>
 
     <!-- ===== Updates =============================================== -->
@@ -203,9 +231,10 @@
     </details>
 
     <!-- ===== Mail app =============================================== -->
-    <details class="cat" data-cat="mail" open>
+    <details class="cat" data-cat="mail">
       <summary>Mail app</summary>
       <div class="cat-body">
+        <p id="mail-disabled-note">Enable <strong>PO email</strong> above to choose where the draft opens.</p>
         <p class="fs-note">Which app should open the drafted PO email:</p>
 
         <fieldset id="fs-mac">
@@ -322,8 +351,19 @@
 
     <!-- ===== PO email ============================================== -->
     <details class="cat" data-cat="po-email">
-      <summary>PO email</summary>
+      <summary>PO email <span class="cat-tag">opt-in</span></summary>
       <div class="cat-body">
+        <fieldset id="fs-po-enabled">
+          <p class="fs-note">
+            Adds a <strong>Draft Email w/ PDF</strong> button to purchase orders that drafts
+            (or sends) the PO email with the exported PDF attached. Turn off to hide the button.
+          </p>
+          <label class="opt">
+            <input type="checkbox" id="po-email-enabled" />
+            Enable PO email button
+          </label>
+        </fieldset>
+
         <fieldset id="fs-pdf">
           <legend>Attached PDF</legend>
           <p class="fs-note">Which Innergy export to attach when you click

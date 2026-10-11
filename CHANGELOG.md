@@ -3,6 +3,18 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.10.0] - 2026-10-11
+### Added
+- Options: each feature's category shows a **green dot + tint when it's enabled
+  or configured**, so you can see what's in use while collapsed.
+- Options: **Expand all / Collapse all** controls, and the page now opens with
+  everything collapsed.
+### Changed
+- **PO email is now opt-in.** The "Draft Email w/ PDF" button only appears when
+  you enable it under Options → PO email. (Turn it on after updating.)
+- Options: the **Mail app** section moved to the end of the list and is grayed
+  out until PO email (a compose feature) is enabled.
+
 ## [1.9.2] - 2026-10-11
 ### Changed
 - Compose-and-send modal: recipients now behave like a desktop mail client —
