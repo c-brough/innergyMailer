@@ -74,6 +74,27 @@
     if (area === "local" && changes.mailApp) mailApp = changes.mailApp.newValue || "";
   });
 
+  // ---- Email header / footer / signature (cached) ---------------------------------
+  // The PO details + items + notes are inserted between header and footer. The
+  // signature is rich HTML (rendered on the compose-and-send path); other paths
+  // get a plain-text version. Defaults must match options.js DEFAULT_EMAIL_*.
+  const DEFAULT_EMAIL_HEADER = "Hello,\n\nPlease find the purchase order details below. The full purchase order is attached as a PDF.";
+  const DEFAULT_EMAIL_FOOTER = "Please confirm receipt of this order and the expected ship date.\n\nThank you,";
+  let emailHeader = DEFAULT_EMAIL_HEADER;
+  let emailFooter = DEFAULT_EMAIL_FOOTER;
+  let emailSignatureHtml = "";
+  chrome.storage.local.get(["emailHeader", "emailFooter", "emailSignatureHtml"], (d) => {
+    if (d.emailHeader != null) emailHeader = d.emailHeader;
+    if (d.emailFooter != null) emailFooter = d.emailFooter;
+    emailSignatureHtml = d.emailSignatureHtml || "";
+  });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local") return;
+    if (changes.emailHeader) emailHeader = changes.emailHeader.newValue != null ? changes.emailHeader.newValue : DEFAULT_EMAIL_HEADER;
+    if (changes.emailFooter) emailFooter = changes.emailFooter.newValue != null ? changes.emailFooter.newValue : DEFAULT_EMAIL_FOOTER;
+    if (changes.emailSignatureHtml) emailSignatureHtml = changes.emailSignatureHtml.newValue || "";
+  });
+
   // ---- Feature enable (opt-in) ----------------------------------------------------
   // The "Draft Email w/ PDF" button only appears when the PO email feature is
   // turned on in Options (poEmailEnabled). Off by default.
@@ -397,17 +418,18 @@
 
     const tag = commonLineTag(items);
     const subject = tag ? `${poNumber} - ${vendor} - ${tag}` : `${poNumber} - ${vendor}`;
-    const body =
-      `Hello,\n\n` +
-      `Please find attached purchase order ${poNumber}${vendor ? ` for ${vendor}` : ""}. ` +
-      `A summary of the ordered items is below, with the full purchase order attached as a PDF.\n\n` +
+    const autoBlock =
       `Purchase Order:  ${poNumber}\n` +
       (vendor ? `Vendor:          ${vendor}\n` : "") +
       `\nItems\n` +
       `${buildSummary(items, includePricing)}\n` +
-      (poNotes ? `\nNotes\n${poNotes}\n` : "") +
-      `\nPlease confirm receipt of this order and the expected ship date.\n\n` +
-      `Thank you,\n`;
+      (poNotes ? `\nNotes\n${poNotes}\n` : "");
+    // Header + auto details + footer. The signature is appended as plain text for
+    // every path except the compose-and-send modal, which adds the rich HTML
+    // signature at send time.
+    let body = `${emailHeader.trim()}\n\n${autoBlock.trim()}\n\n${emailFooter.trim()}`;
+    const sigText = emailSignatureHtml ? IC.htmlToText(emailSignatureHtml).trim() : "";
+    if (sigText && mailApp !== "outlook_web_modal") body += `\n\n${sigText}`;
 
     if (!to) {
       IC.warn("No vendor contact email found; drafting without a recipient.");
@@ -762,7 +784,7 @@
 
     const att = document.createElement("div");
     Object.assign(att.style, { margin: "4px 0 2px", fontSize: "12.5px", color: "#3a5a44", flex: "0 0 auto" });
-    att.textContent = "📎 The PO PDF attaches automatically.";
+    att.textContent = "📎 The PO PDF attaches automatically." + (emailSignatureHtml ? "  ✒️ Your signature will be added." : "");
     const checks = [];
     if (undecidedFiles && undecidedFiles.length) {
       const sub = document.createElement("div");

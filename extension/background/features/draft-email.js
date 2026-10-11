@@ -47,6 +47,13 @@ async function resolveMailApp() {
   return OS_APPS[os].includes(stored.mailApp) ? stored.mailApp : defaultApp;
 }
 
+// Escape plain text and turn newlines into <br> for an HTML email body.
+function textToHtml(text) {
+  return String(text || "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/\r\n/g, "\n").replace(/\n/g, "<br>");
+}
+
 // Fetch a URL and return it as a Graph fileAttachment { name, bytesBase64,
 // contentType }. SAS-signed Azure blob URLs (the exported PDF) are public GETs;
 // PO files on app.innergy.com need the session cookie (withCreds).
@@ -72,14 +79,19 @@ async function fetchAttachment(url, name, withCreds) {
 // the outcome to the compose modal via MAIL_RESULT.
 async function deliverViaGraph(pdfUrl, pending) {
   try {
-    const { azureClientId } = await chrome.storage.local.get("azureClientId");
+    const { azureClientId, emailSignatureHtml } = await chrome.storage.local.get(["azureClientId", "emailSignatureHtml"]);
     const atts = [await fetchAttachment(pdfUrl, null, false)];
     for (const f of pending.files || []) {
       try { atts.push(await fetchAttachment(f.url, f.name, true)); }
       catch (e) { dbg("PO file skipped", { name: f.name, error: String(e) }); }
     }
+    // With a saved signature, send HTML so it renders formatted; the plain body
+    // becomes <br>-joined text above it.
+    const bodyHtml = emailSignatureHtml
+      ? textToHtml(pending.body) + "<br><br>" + emailSignatureHtml
+      : null;
     const r = await sendPoEmail({
-      clientId: azureClientId, subject: pending.subject, body: pending.body,
+      clientId: azureClientId, subject: pending.subject, body: pending.body, bodyHtml,
       recipients: pending.recipients, attachments: atts,
     });
     if (r.ok) {

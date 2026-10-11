@@ -127,6 +127,35 @@ pricingBox.addEventListener("change", (e) => {
   showSaved();
 });
 
+// Email header / footer / signature. The PO details + items + notes are inserted
+// between header and footer by the content script. Defaults here must match
+// DEFAULT_EMAIL_* in content/features/draft-email.js.
+const DEFAULT_EMAIL_HEADER = "Hello,\n\nPlease find the purchase order details below. The full purchase order is attached as a PDF.";
+const DEFAULT_EMAIL_FOOTER = "Please confirm receipt of this order and the expected ship date.\n\nThank you,";
+const headerArea = document.getElementById("email-header");
+const footerArea = document.getElementById("email-footer");
+const sigBox = document.getElementById("email-signature");
+chrome.storage.local.get(["emailHeader", "emailFooter", "emailSignatureHtml"], (d) => {
+  headerArea.value = d.emailHeader != null ? d.emailHeader : DEFAULT_EMAIL_HEADER;
+  footerArea.value = d.emailFooter != null ? d.emailFooter : DEFAULT_EMAIL_FOOTER;
+  if (d.emailSignatureHtml) sigBox.innerHTML = d.emailSignatureHtml;
+});
+let tmplTimer;
+function saveTmpl() {
+  chrome.storage.local.set({
+    emailHeader: headerArea.value,
+    emailFooter: footerArea.value,
+    emailSignatureHtml: sigBox.innerHTML.trim(),
+  });
+  showSaved();
+}
+const debouncedTmpl = () => { clearTimeout(tmplTimer); tmplTimer = setTimeout(saveTmpl, 500); };
+headerArea.addEventListener("input", debouncedTmpl);
+footerArea.addEventListener("input", debouncedTmpl);
+sigBox.addEventListener("input", debouncedTmpl);
+sigBox.addEventListener("blur", saveTmpl);
+document.getElementById("sig-clear").addEventListener("click", () => { sigBox.innerHTML = ""; saveTmpl(); });
+
 // Save client ID as the user types (debounced).
 let saveTimer;
 document.getElementById("client-id").addEventListener("input", (e) => {

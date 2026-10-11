@@ -138,6 +138,22 @@
         width: 100%; box-sizing: border-box; font: 13px monospace;
         padding: 5px 8px; border: 1px solid #ccc; border-radius: 6px;
       }
+      .tmpl-lbl { display: block; font-size: 12px; font-weight: 600; color: #444; margin: 8px 0 3px; }
+      .tmpl-area {
+        width: 100%; box-sizing: border-box; font: 13px -apple-system, system-ui, sans-serif;
+        padding: 7px 9px; border: 1px solid #ccc; border-radius: 6px; resize: vertical; line-height: 1.45;
+      }
+      .sig-box {
+        min-height: 70px; border: 1px solid #ccc; border-radius: 6px; padding: 8px 10px;
+        font: 13px -apple-system, system-ui, sans-serif; background: #fff; overflow: auto;
+      }
+      .sig-box:focus { outline: 2px solid #c7d0f8; outline-offset: -1px; }
+      .sig-box:empty::before { content: "Your signature…"; color: #aaa; }
+      .sig-tools { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+      #sig-clear {
+        padding: 4px 10px; border: 1px solid #ccc; background: #f3f3f3; border-radius: 6px;
+        cursor: pointer; font-size: 12.5px;
+      }
       #bom-base-url.invalid { border-color: #c62828; background: #fff6f6; }
       #bom-base-url-status { font-size: 12px; margin-top: 6px; min-height: 16px; color: #c62828; }
       .tag {
@@ -386,6 +402,24 @@
             <input type="checkbox" id="include-pricing" />
             Include line-item pricing (unit &amp; extended cost)
           </label>
+        </fieldset>
+
+        <fieldset id="fs-email-template">
+          <legend>Header, footer &amp; signature</legend>
+          <p class="fs-note">The PO number, vendor, items, and notes are inserted between
+            your header and footer. Edit these to match how you write.</p>
+          <label class="tmpl-lbl" for="email-header">Header</label>
+          <textarea id="email-header" rows="3" class="tmpl-area"></textarea>
+          <label class="tmpl-lbl" for="email-footer">Footer</label>
+          <textarea id="email-footer" rows="3" class="tmpl-area"></textarea>
+          <label class="tmpl-lbl">Signature
+            <span class="fs-note" style="font-weight:400">— paste a formatted signature (keeps bold, links, etc.) or type one</span>
+          </label>
+          <div id="email-signature" contenteditable="true" class="sig-box"></div>
+          <div class="sig-tools">
+            <button type="button" id="sig-clear">Clear signature</button>
+            <span class="fs-note" style="margin:0">Formatting shows on the compose-and-send path; plain mail apps get a text version.</span>
+          </div>
         </fieldset>
       </div>
     </details>

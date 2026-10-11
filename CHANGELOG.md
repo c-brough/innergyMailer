@@ -3,6 +3,14 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.12.0] - 2026-10-11
+### Added
+- Options → PO email: editable **email header** and **footer** (with sensible
+  defaults). The PO number, vendor, items, and notes are inserted between them.
+- A **signature** you can paste formatted (keeps bold, links, etc.). It renders
+  with formatting on the compose-and-send path (sent as HTML); plain mail apps
+  get an auto plain-text version. Header/footer/signature apply to all paths.
+
 ## [1.11.0] - 2026-10-11
 ### Changed
 - Time Tracking: a single selected segment now offers only **Add Segments**

@@ -9,11 +9,13 @@
 import { getGraphToken } from "../shared/graph-identity.js";
 
 // attachments: [{ name, bytesBase64, contentType }]
-export async function sendPoEmail({ clientId, subject, body, recipients, attachments }) {
+// bodyHtml (optional): when present the message is sent as HTML (used to render
+// the rich signature); otherwise it's sent as plain text.
+export async function sendPoEmail({ clientId, subject, body, bodyHtml, recipients, attachments }) {
   const token = await getGraphToken(clientId, true);
   const message = {
     subject: subject || "",
-    body: { contentType: "Text", content: body || "" },
+    body: bodyHtml ? { contentType: "HTML", content: bodyHtml } : { contentType: "Text", content: body || "" },
     toRecipients: (recipients || []).map((a) => ({ emailAddress: { address: a } })),
     attachments: (attachments || []).map((a) => ({
       "@odata.type": "#microsoft.graph.fileAttachment",
