@@ -549,16 +549,13 @@
       const arrow = document.createElement("span");
       arrow.textContent = side === "before" ? "▲" : "▼";
       Object.assign(arrow.style, { color: "#555", fontSize: "9px", textShadow: "0 1px 2px rgba(255,255,255,.8)" });
-      const one = mkPillBtn("Add Segment", "#1f9d57", ctx.statusFiltered);
       const many = mkPillBtn("Add Segments", "#2f6feb", ctx.statusFiltered);
       if (!ctx.statusFiltered) {
         const where = side === "before" ? "before (above)" : "after (below)";
-        one.title = `Add one segment ${where} this one`;
         many.title = `Add one or more segments ${where} this one`;
-        one.addEventListener("click", (e) => { e.stopPropagation(); openInsertForm(insertCtx(ctx, side), false); });
-        many.addEventListener("click", (e) => { e.stopPropagation(); openInsertForm(insertCtx(ctx, side), true); });
+        many.addEventListener("click", (e) => { e.stopPropagation(); openInsertForm(insertCtx(ctx, side)); });
       }
-      g.append(arrow, one, many);
+      g.append(arrow, many);
       return g;
     }
     if (ctx.roomBefore) ov.appendChild(mkGroup("before"));
@@ -567,14 +564,15 @@
   }
 
   // Build the insert-form context for a side from the single-selection ctx.
+  // outerLimit is how far the window MAY extend on the open side (the neighbour
+  // or midnight); the form chooses between the anchor's original edge and that.
   function insertCtx(ctx, side) {
     return {
       employeeId: ctx.employeeId,
       employeeName: ctx.employeeName,
       side,
       anchor: ctx.anchor,
-      winStart: side === "before" ? ctx.beforeLower : ctx.anchor.startMs,
-      winEnd: side === "before" ? ctx.anchor.endMs : ctx.afterUpper,
+      outerLimit: side === "before" ? ctx.beforeLower : ctx.afterUpper,
     };
   }
 
@@ -1425,28 +1423,39 @@
   }
 
   // ---- Insert form (before/after a single selected segment) --------------------
-  // Add one or more segments on one side of the selected segment, within
-  // [winStart, winEnd] (bounded by the neighbour or midnight). The selected
-  // segment appears as a read-only "anchor" row whose inner edge can be dragged
-  // to shrink it and make room — which edits that entry on submit. Gaps between
-  // rows are unpaid breaks (noted on the row before them). Time-based only.
-  function openInsertForm(ctx, isMulti) {
+  // Add one or more segments on one side of the selected segment. Starts with one
+  // new row ("+ Add segment" adds more). An End/Start toggle chooses the open
+  // edge: "Keep original" re-slices within the segment's own time (it shrinks to
+  // make room); "Extend" opens the window to an editable clock-out (after) or
+  // clock-in (before), defaulting to the neighbour/midnight. The selected segment
+  // is a read-only "anchor" row whose inner edge can also be dragged; moving it
+  // edits that entry on submit. Gaps between rows are unpaid breaks (≤2 h, noted
+  // on the row before them). Time-based only.
+  function openInsertForm(ctx) {
     const side = ctx.side;                 // "before" | "after"
-    const winStart = ctx.winStart, winEnd = ctx.winEnd;
-    const dStart = dayStartMs(winStart);
     const origStart = ctx.anchor.startMs, origEnd = ctx.anchor.endMs;
+    const dStart = dayStartMs(origStart);
+    const outerLimit = ctx.outerLimit;     // neighbour/midnight on the open side
 
-    // The anchor row carries live times; the OUTER edge is locked to the window.
+    // Window far edge. "constrain" keeps the anchor's original edge (re-slice its
+    // own time); "extend" opens the window out to a clock time — a clock-OUT for
+    // the after side, a clock-IN for the before side — defaulting to the outer
+    // limit (next segment, else midnight = end/start of day).
+    let extend = false;
+    let clockMs = outerLimit;
+    let winStart = origStart, winEnd = origEnd;
+    function recomputeWindow() {
+      if (side === "after") { winStart = origStart; winEnd = extend ? clockMs : origEnd; }
+      else { winEnd = origEnd; winStart = extend ? clockMs : origStart; }
+    }
+
     const anchorRow = { anchor: true, startMs: origStart, endMs: origEnd };
-    if (side === "before") anchorRow.endMs = winEnd;   // outer (end) fixed
-    else anchorRow.startMs = winStart;                 // outer (start) fixed
-
     let anchorDto = null, anchorLabel = "Loading…", anchorLoadFailed = false;
     let newRows = [];
     function makeNewRow() { const picker = mkAllocationPicker({ showToggle: true }); picker.onValidity(renderFooter); return { startMs: null, endMs: null, picker }; }
     const composed = () => (side === "before" ? [...newRows, anchorRow] : [anchorRow, ...newRows]);
 
-    // Even-fill the free window with the current new rows.
+    // Even-fill the free window (anchor's inner edge → far edge) with the new rows.
     function relayoutNew() {
       const lo = side === "before" ? winStart : anchorRow.endMs;
       const hi = side === "before" ? anchorRow.startMs : winEnd;
@@ -1456,25 +1465,28 @@
       newRows.forEach((r, i) => { r.startMs = cur; r.endMs = i === n - 1 ? hi : cur + Math.round(span / n); cur = r.endMs; });
     }
 
-    // Initial carve: fill the existing free gap, or take a default chunk from the
-    // anchor (shrinking it) when the side is flush against it.
-    (function initLayout() {
-      if (side === "before") {
-        const free = anchorRow.startMs - winStart;
-        let desired = free >= MIN_MS ? free : Math.min(anchorRow.endMs - anchorRow.startMs - MIN_MS, HOUR_MS);
-        desired = Math.max(desired, MIN_MS);
-        const newEnd = winStart + desired;
-        if (newEnd > anchorRow.startMs) anchorRow.startMs = newEnd; // shrink
+    // Lay out anchor + new rows for the current window. The anchor's inner edge
+    // resets to its original, then shrinks only if the window leaves no free room
+    // (constrain mode) so there's space to add. New rows (and pickers) are kept;
+    // only their times are recomputed.
+    function relayout() {
+      recomputeWindow();
+      anchorRow.startMs = origStart; anchorRow.endMs = origEnd;
+      if (side === "after") {
+        if (winEnd - anchorRow.endMs < MIN_MS) {
+          const desired = Math.max(MIN_MS, Math.min(origEnd - origStart - MIN_MS, HOUR_MS));
+          anchorRow.endMs = Math.max(origStart + MIN_MS, winEnd - desired);
+        }
       } else {
-        const free = winEnd - anchorRow.endMs;
-        let desired = free >= MIN_MS ? free : Math.min(anchorRow.endMs - anchorRow.startMs - MIN_MS, HOUR_MS);
-        desired = Math.max(desired, MIN_MS);
-        const newStart = winEnd - desired;
-        if (newStart < anchorRow.endMs) anchorRow.endMs = newStart; // shrink
+        if (anchorRow.startMs - winStart < MIN_MS) {
+          const desired = Math.max(MIN_MS, Math.min(origEnd - origStart - MIN_MS, HOUR_MS));
+          anchorRow.startMs = Math.min(origEnd - MIN_MS, winStart + desired);
+        }
       }
-      newRows = [makeNewRow()]; if (isMulti) newRows.push(makeNewRow());
       relayoutNew();
-    })();
+    }
+    newRows = [makeNewRow()]; // default to one; "+ Add segment" adds more
+    relayout();
 
     const anchorMoved = () => (side === "before" ? anchorRow.startMs !== origStart : anchorRow.endMs !== origEnd);
 
@@ -1485,8 +1497,49 @@
     h.textContent = side === "before" ? "Add segment(s) before" : "Add segment(s) after";
     Object.assign(h.style, { fontWeight: "700", fontSize: "16px", marginBottom: "2px" });
     const sub = document.createElement("div");
-    sub.textContent = `${ctx.employeeName} · window ${fmtTime(winStart)} – ${fmtTime(winEnd)}`;
     Object.assign(sub.style, { color: "#666", marginBottom: "12px", fontSize: "12.5px" });
+    const setSub = () => { sub.textContent = `${ctx.employeeName} · window ${fmtTime(winStart)} – ${fmtTime(winEnd)}`; };
+
+    // Constrain | Extend toggle for the open edge, with a clock time when extending.
+    const edgeWord = side === "after" ? "End" : "Start";
+    const clockWord = side === "after" ? "clock-out" : "clock-in";
+    const edgeRow = document.createElement("div");
+    Object.assign(edgeRow.style, { display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "12px" });
+    const edgeLbl = document.createElement("span");
+    edgeLbl.textContent = edgeWord + ":";
+    Object.assign(edgeLbl.style, { color: "#555", fontSize: "12.5px", fontWeight: "600" });
+    const toggle = document.createElement("div");
+    Object.assign(toggle.style, { display: "inline-flex", border: "1px solid #ccd", borderRadius: "7px", overflow: "hidden" });
+    const segKeep = document.createElement("button");
+    const segExt = document.createElement("button");
+    for (const b of [segKeep, segExt]) {
+      b.type = "button";
+      Object.assign(b.style, { padding: "5px 12px", border: "none", background: "#fff", cursor: "pointer", font: "12.5px -apple-system, system-ui, sans-serif", fontWeight: "600", color: "#555" });
+    }
+    segKeep.textContent = `Keep original (${fmtTime(side === "after" ? origEnd : origStart)})`;
+    segExt.textContent = `Extend to ${clockWord}`;
+    segExt.style.borderLeft = "1px solid #ccd";
+    const clockIn = mkTimeInput({
+      dayStart: dStart, required: true, width: "110px",
+      getBounds: () => side === "after"
+        ? { min: origEnd, max: outerLimit }
+        : { min: outerLimit, max: origStart },
+    });
+    clockIn.setMs(clockMs);
+    clockIn.el.style.display = "none";
+    clockIn.onChange((ms) => { if (ms != null) { clockMs = ms; relayout(); render(); } });
+    function paintEdge() {
+      for (const [b, on] of [[segKeep, !extend], [segExt, extend]]) {
+        b.style.background = on ? "#1a56db" : "#fff";
+        b.style.color = on ? "#fff" : "#555";
+      }
+      clockIn.el.style.display = extend ? "" : "none";
+    }
+    function setExtend(on) { extend = on; if (on) { clockMs = outerLimit; clockIn.setMs(clockMs); } relayout(); paintEdge(); render(); }
+    segKeep.addEventListener("click", () => setExtend(false));
+    segExt.addEventListener("click", () => setExtend(true));
+    toggle.append(segKeep, segExt);
+    edgeRow.append(edgeLbl, toggle, clockIn.el);
 
     const list = document.createElement("div");
     const addBtn = document.createElement("button");
@@ -1505,6 +1558,7 @@
 
     function render() {
       if (openComboClose) openComboClose();
+      setSub();
       list.innerHTML = "";
       const arr = composed();
       arr.forEach((row, ci) => {
@@ -1697,9 +1751,20 @@
       refreshGrid();
     });
 
+    // No room to extend past a flush neighbour — disable that choice.
+    const canExtend = side === "after" ? (outerLimit - origEnd > MIN_MS) : (origStart - outerLimit > MIN_MS);
+    if (!canExtend) {
+      segExt.disabled = true;
+      segExt.style.opacity = "0.5";
+      segExt.style.cursor = "not-allowed";
+      segExt.title = "No room to extend (adjacent segment is right there)";
+    }
+
+    setSub();
+    paintEdge();
     render();
     btns.append(cancel, create);
-    card.append(h, sub, list, addBtn, remaining, btns);
+    card.append(h, sub, edgeRow, list, addBtn, remaining, btns);
     document.body.appendChild(overlay);
 
     // Load the anchor's allocation so we can preserve it when editing.

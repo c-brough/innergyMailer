@@ -3,6 +3,17 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.11.0] - 2026-10-11
+### Changed
+- Time Tracking: a single selected segment now offers only **Add Segments**
+  (per side), and that form opens with **one** segment ("+ Add segment" adds
+  more).
+### Added
+- Add-segments (before/after a single segment): an **End/Start** toggle —
+  **Keep original** (re-slice within the segment's own time) or **Extend** to an
+  editable **clock-out** (after) / **clock-in** (before), defaulting to the next
+  segment or end/start of day. Works on both sides.
+
 ## [1.10.1] - 2026-10-11
 ### Changed
 - Time Tracking: gaps longer than **2 hours** are no longer treated as unpaid
