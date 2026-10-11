@@ -118,7 +118,43 @@ install.sh                        macOS installer (host + extension copy)
 install.bat                       Windows installer — double-click; auto-elevates and runs the .ps1
 install_windows.ps1               Windows installer (PowerShell; invoked by install.bat)
 install_linux.sh                  Linux installer (incl. Raspberry Pi OS)
+bootstrap.sh                      macOS/Linux one-line installer (downloads from GitHub, runs installer)
+bootstrap.ps1                     Windows one-line installer (downloads from GitHub, runs installer)
 ```
+
+## Install from GitHub (one line)
+
+No manual download needed — these fetch the latest from GitHub (public repo, no
+sign-in) and run the installer for your OS. You still do the one Chrome click at
+the end ("Load unpacked", or just reload the card when updating).
+
+**macOS / Linux** (Terminal):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/c-brough/innergyMailer/main/bootstrap.sh | bash
+```
+
+**Windows** (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/c-brough/innergyMailer/main/bootstrap.ps1 | iex
+```
+
+Track a non-default branch (until work is merged to `main`):
+
+```bash
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/c-brough/innergyMailer/one-click-installers/bootstrap.sh | bash -s -- one-click-installers
+```
+```powershell
+# Windows
+$env:INNERCIDER_BRANCH="one-click-installers"; irm https://raw.githubusercontent.com/c-brough/innergyMailer/one-click-installers/bootstrap.ps1 | iex
+```
+
+> Note: the one-liner's URL points at the branch that *contains* `bootstrap.*`.
+> After merging to `main`, the plain `main` commands above are all you need.
+> Once installed, later updates are one-click from the extension's Options →
+> Updates (no need to re-run this).
 
 ## Install — Windows
 
