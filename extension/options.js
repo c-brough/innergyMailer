@@ -28,13 +28,20 @@ Object.entries(OS_OPTION_IDS).forEach(([os, ids]) => {
 // Microsoft Graph API, so both need the Azure Client ID + device-code sign-in.
 // "outlook_new" is kept as-is rather than renamed: existing Windows installs
 // already have that value saved in chrome.storage.local.
-const GRAPH_APPS = ["outlook_new", "outlook_web"];
+const GRAPH_APPS = ["outlook_new", "outlook_web", "outlook_web_modal"];
 
 // Show/hide the Graph API setup panel based on selected app.
 const graphFieldset = document.getElementById("fs-graph");
 function updateGraphVisibility(value) {
   const needsGraph = GRAPH_APPS.includes(value);
   graphFieldset.style.display = needsGraph ? "block" : "none";
+  // The compose-and-send option signs in via chrome.identity on first Send, not
+  // the device-code "Sign in" button — hide that button and show a note instead.
+  const isModal = value === "outlook_web_modal";
+  const authBtn = document.getElementById("auth-btn");
+  const owaNote = document.getElementById("owa-signin-note");
+  if (authBtn) authBtn.style.display = isModal ? "none" : "";
+  if (owaNote) owaNote.style.display = isModal ? "block" : "none";
   if (!needsGraph) {
     document.getElementById("graph-help").style.display = "none";
     resetHelpButtons();
@@ -82,6 +89,72 @@ document.querySelectorAll('input[name="mailApp"]').forEach((input) => {
     showSaved();
   });
 });
+
+// Which Innergy button produces the PO email's PDF. Default must match
+// DEFAULT_PDF_SOURCE in content/features/draft-email.js.
+const DEFAULT_PDF_SOURCE = "custom";
+chrome.storage.local.get("pdfSource", (data) => {
+  const input =
+    document.querySelector(`input[name="pdfSource"][value="${data.pdfSource}"]`) ||
+    document.querySelector(`input[name="pdfSource"][value="${DEFAULT_PDF_SOURCE}"]`);
+  input.checked = true;
+});
+document.querySelectorAll('input[name="pdfSource"]').forEach((input) => {
+  input.addEventListener("change", (e) => {
+    chrome.storage.local.set({ pdfSource: e.target.value });
+    showSaved();
+  });
+});
+
+// PO email feature enable (opt-in). Off by default; the content script only adds
+// the "Draft Email w/ PDF" button when this is on.
+const poEnabledBox = document.getElementById("po-email-enabled");
+chrome.storage.local.get("poEmailEnabled", (data) => {
+  poEnabledBox.checked = data.poEmailEnabled === true;
+});
+poEnabledBox.addEventListener("change", (e) => {
+  chrome.storage.local.set({ poEmailEnabled: e.target.checked });
+  showSaved();
+});
+
+// Include line-item pricing (extended cost) in the PO email body. Off by default.
+const pricingBox = document.getElementById("include-pricing");
+chrome.storage.local.get("includePricing", (data) => {
+  pricingBox.checked = data.includePricing === true;
+});
+pricingBox.addEventListener("change", (e) => {
+  chrome.storage.local.set({ includePricing: e.target.checked });
+  showSaved();
+});
+
+// Email header / footer / signature. The PO details + items + notes are inserted
+// between header and footer by the content script. Defaults here must match
+// DEFAULT_EMAIL_* in content/features/draft-email.js.
+const DEFAULT_EMAIL_HEADER = "Hello,\n\nPlease find the purchase order details below. The full purchase order is attached as a PDF.";
+const DEFAULT_EMAIL_FOOTER = "Please confirm receipt of this order and the expected ship date.\n\nThank you,";
+const headerArea = document.getElementById("email-header");
+const footerArea = document.getElementById("email-footer");
+const sigBox = document.getElementById("email-signature");
+chrome.storage.local.get(["emailHeader", "emailFooter", "emailSignatureHtml"], (d) => {
+  headerArea.value = d.emailHeader != null ? d.emailHeader : DEFAULT_EMAIL_HEADER;
+  footerArea.value = d.emailFooter != null ? d.emailFooter : DEFAULT_EMAIL_FOOTER;
+  if (d.emailSignatureHtml) sigBox.innerHTML = d.emailSignatureHtml;
+});
+let tmplTimer;
+function saveTmpl() {
+  chrome.storage.local.set({
+    emailHeader: headerArea.value,
+    emailFooter: footerArea.value,
+    emailSignatureHtml: sigBox.innerHTML.trim(),
+  });
+  showSaved();
+}
+const debouncedTmpl = () => { clearTimeout(tmplTimer); tmplTimer = setTimeout(saveTmpl, 500); };
+headerArea.addEventListener("input", debouncedTmpl);
+footerArea.addEventListener("input", debouncedTmpl);
+sigBox.addEventListener("input", debouncedTmpl);
+sigBox.addEventListener("blur", saveTmpl);
+document.getElementById("sig-clear").addEventListener("click", () => { sigBox.innerHTML = ""; saveTmpl(); });
 
 // Save client ID as the user types (debounced).
 let saveTimer;
@@ -206,8 +279,334 @@ function setAuthStatus(cls, msg) {
   el.textContent = msg;
 }
 
+// ---- Outlook-on-the-web (modal) help + redirect URI --------------------------
+// The in-page compose option authenticates via chrome.identity, which needs the
+// extension's chromiumapp.org redirect URI registered on the Azure app. Show it
+// so the user can copy it, and toggle the setup instructions.
+(() => {
+  const help = document.getElementById("owa-modal-help");
+  document.querySelectorAll(".owa-modal-help-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      help.style.display = help.style.display === "block" ? "none" : "block";
+    });
+  });
+  try {
+    const uri = chrome.identity.getRedirectURL();
+    const el = document.getElementById("owa-redirect-uri");
+    if (el) el.textContent = uri;
+  } catch (e) {
+    /* identity unavailable — leave placeholder */
+  }
+})();
+
 function showSaved() {
   const el = document.getElementById("status");
   el.textContent = "Saved";
   setTimeout(() => (el.textContent = ""), 1500);
 }
+
+// ---- Time Tracking Tools (opt-in) --------------------------------------------
+// Off by default; only turned on for people who edit/approve time. The content
+// feature (content/features/time-tracking.js) reads `timeTrackingEnabled`.
+const ttBox = document.getElementById("tt-enabled");
+chrome.storage.local.get("timeTrackingEnabled", (data) => {
+  ttBox.checked = data.timeTrackingEnabled === true;
+});
+ttBox.addEventListener("change", (e) => {
+  chrome.storage.local.set({ timeTrackingEnabled: e.target.checked });
+  showSaved();
+});
+
+// ---- Settings search ---------------------------------------------------------
+// Filters the collapsible categories: a query shows only the categories whose
+// text matches, opens them, and scrolls the first match into view. Clearing
+// restores the default (all collapsed).
+(() => {
+  const search = document.getElementById("opt-search");
+  const noResults = document.getElementById("no-results");
+  const cats = Array.from(document.querySelectorAll("details.cat"));
+  const defaultOpen = new Map(cats.map((c) => [c, c.open]));
+
+  function apply() {
+    const q = search.value.trim().toLowerCase();
+    if (!q) {
+      cats.forEach((c) => {
+        c.hidden = false;
+        c.open = defaultOpen.get(c);
+      });
+      noResults.style.display = "none";
+      return;
+    }
+    let first = null;
+    for (const c of cats) {
+      const match = c.textContent.toLowerCase().includes(q);
+      c.hidden = !match;
+      c.open = match;
+      if (match && !first) first = c;
+    }
+    noResults.style.display = first ? "none" : "block";
+    if (first) first.scrollIntoView({ block: "nearest" });
+  }
+
+  search.addEventListener("input", apply);
+})();
+
+// ---- Updates (check GitHub, show changelog, one-click update) -----------------
+// The extension is loaded unpacked from a fixed folder the native host can write
+// to, so "Update now" = ask the host to download the latest from GitHub, then
+// chrome.runtime.reload() to pick up the new files. The check + changelog are
+// plain fetches against the public repo (no auth).
+(() => {
+  const REPO = "c-brough/innergyMailer";
+  const DEFAULT_BRANCH = "main";
+  const RAW = (branch, path) =>
+    `https://raw.githubusercontent.com/${REPO}/${encodeURIComponent(branch)}/${path}?t=${Date.now()}`;
+
+  const installed = chrome.runtime.getManifest().version;
+  const banner = document.getElementById("update-banner");
+  const ubVersions = document.getElementById("ub-versions");
+  const ubUpdate = document.getElementById("ub-update");
+  const ubChangelog = document.getElementById("ub-changelog");
+  const updateStatus = document.getElementById("update-status");
+  const branchSel = document.getElementById("update-branch");
+  const checkNow = document.getElementById("check-now");
+  const viewChangelog = document.getElementById("view-changelog");
+  const updatesStatus = document.getElementById("updates-status");
+  const updTag = document.getElementById("upd-tag");
+  document.getElementById("installed-version").textContent = "v" + installed;
+
+  let currentBranch = DEFAULT_BRANCH;
+  let latestVersion = null;
+
+  // "1.8.0" > "1.7.1" by numeric segments.
+  function semverGt(a, b) {
+    const pa = String(a).split(".").map((n) => parseInt(n, 10) || 0);
+    const pb = String(b).split(".").map((n) => parseInt(n, 10) || 0);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      if ((pa[i] || 0) > (pb[i] || 0)) return true;
+      if ((pa[i] || 0) < (pb[i] || 0)) return false;
+    }
+    return false;
+  }
+
+  async function fetchText(url, ms) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), ms || 10000);
+    try {
+      const r = await fetch(url, { signal: ctrl.signal, cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return await r.text();
+    } finally { clearTimeout(t); }
+  }
+
+  async function populateBranches() {
+    try {
+      const txt = await fetchText(`https://api.github.com/repos/${REPO}/branches?per_page=100`, 10000);
+      const names = JSON.parse(txt).map((b) => b.name);
+      if (!names.includes(currentBranch)) names.unshift(currentBranch);
+      branchSel.innerHTML = "";
+      for (const n of names) {
+        const o = document.createElement("option");
+        o.value = n; o.textContent = n; if (n === currentBranch) o.selected = true;
+        branchSel.appendChild(o);
+      }
+    } catch (e) {
+      // Fall back to just the stored/default branch if the API is unreachable.
+      branchSel.innerHTML = "";
+      const o = document.createElement("option");
+      o.value = currentBranch; o.textContent = currentBranch; o.selected = true;
+      branchSel.appendChild(o);
+    }
+  }
+
+  async function check(quiet) {
+    if (!quiet) updatesStatus.textContent = "Checking…";
+    try {
+      const txt = await fetchText(RAW(currentBranch, "extension/manifest.json"), 10000);
+      latestVersion = JSON.parse(txt).version;
+      updTag.textContent = "v" + latestVersion;
+      if (semverGt(latestVersion, installed)) {
+        ubVersions.textContent = `v${installed} → v${latestVersion} (${currentBranch})`;
+        banner.classList.add("show");
+        updatesStatus.textContent = `Update available: v${latestVersion}.`;
+      } else {
+        banner.classList.remove("show");
+        updatesStatus.textContent = semverGt(installed, latestVersion)
+          ? `You're ahead of ${currentBranch} (installed v${installed}, branch v${latestVersion}).`
+          : `Up to date (v${installed}).`;
+      }
+    } catch (e) {
+      banner.classList.remove("show");
+      updatesStatus.textContent = "Couldn't check for updates: " + e.message;
+    }
+  }
+
+  // ---- changelog modal ----
+  const clOverlay = document.getElementById("cl-overlay");
+  const clBody = document.getElementById("cl-body");
+  document.getElementById("cl-close").addEventListener("click", () => clOverlay.classList.remove("show"));
+  clOverlay.addEventListener("click", (e) => { if (e.target === clOverlay) clOverlay.classList.remove("show"); });
+
+  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const inlineCode = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>");
+
+  // Parse "## [x.y.z] - date" sections into { version, date, body }.
+  function parseChangelog(md) {
+    const out = [];
+    const re = /^##\s*\[([0-9][0-9.]*)\]\s*-?\s*(.*)$/gm;
+    let m, prev = null;
+    while ((m = re.exec(md))) {
+      if (prev) prev.body = md.slice(prev._end, m.index).trim();
+      prev = { version: m[1], date: (m[2] || "").trim(), _end: re.lastIndex };
+      out.push(prev);
+    }
+    if (prev) prev.body = md.slice(prev._end).trim();
+    return out;
+  }
+
+  function renderEntry(e) {
+    let html = `<h3>v${esc(e.version)}${e.date ? " — " + esc(e.date) : ""}</h3>`;
+    let inList = false;
+    for (const raw of e.body.split("\n")) {
+      const line = raw.trimEnd();
+      const h = line.match(/^###\s+(.*)$/);
+      const li = line.match(/^[-*]\s+(.*)$/);
+      if (h) { if (inList) { html += "</ul>"; inList = false; } html += `<div class="cl-kind">${esc(h[1])}</div>`; }
+      else if (li) { if (!inList) { html += "<ul>"; inList = true; } html += `<li>${inlineCode(li[1])}</li>`; }
+      else if (line && !inList) { html += `<div>${inlineCode(line)}</div>`; }
+    }
+    if (inList) html += "</ul>";
+    return html;
+  }
+
+  async function showChangelog(onlyNewer) {
+    clBody.innerHTML = "Loading…";
+    clOverlay.classList.add("show");
+    try {
+      const md = await fetchText(RAW(currentBranch, "CHANGELOG.md"), 10000);
+      let entries = parseChangelog(md);
+      if (onlyNewer) {
+        const newer = entries.filter((e) => semverGt(e.version, installed));
+        if (newer.length) entries = newer;
+      }
+      entries = entries.slice(0, 20);
+      clBody.innerHTML = entries.length ? entries.map(renderEntry).join("") : "No changelog entries found.";
+    } catch (e) {
+      clBody.innerHTML = "Couldn't load the changelog: " + esc(e.message);
+    }
+  }
+
+  // ---- update now ----
+  function doUpdate() {
+    ubUpdate.disabled = true;
+    updateStatus.textContent = "Downloading the latest version…";
+    chrome.runtime.sendMessage({ type: "UPDATE_EXTENSION", branch: currentBranch }, (resp) => {
+      if (chrome.runtime.lastError || !resp) {
+        ubUpdate.disabled = false;
+        updateStatus.textContent = "Couldn't reach the updater. Re-run the installer to enable one-click updates.";
+        return;
+      }
+      if (resp.transportError) {
+        ubUpdate.disabled = false;
+        updateStatus.textContent = "Update helper not reachable — re-run the installer once to enable one-click updates.";
+        return;
+      }
+      if (resp.ok) {
+        updateStatus.textContent = `Updated to v${resp.version || latestVersion}. Reloading…`;
+        setTimeout(() => chrome.runtime.reload(), 900);
+      } else {
+        ubUpdate.disabled = false;
+        updateStatus.textContent = "Update failed: " + (resp.error || "unknown error");
+      }
+    });
+  }
+
+  ubUpdate.addEventListener("click", doUpdate);
+  ubChangelog.addEventListener("click", () => showChangelog(true));
+  viewChangelog.addEventListener("click", () => showChangelog(false));
+  checkNow.addEventListener("click", () => check(false));
+  branchSel.addEventListener("change", () => {
+    currentBranch = branchSel.value;
+    chrome.storage.local.set({ updateBranch: currentBranch });
+    check(false);
+  });
+
+  chrome.storage.local.get("updateBranch", async (data) => {
+    currentBranch = data.updateBranch || DEFAULT_BRANCH;
+    await populateBranches();
+    check(true);
+  });
+})();
+
+// ---- Category status (green = in use) + expand/collapse all -------------------
+// A green dot + soft tint on a category whose feature is enabled/configured, so
+// you can see what's in use while everything is collapsed.
+(() => {
+  const cats = Array.from(document.querySelectorAll("details.cat"));
+  // Prepend a status dot to each summary (the ▸ triangle is a ::before pseudo,
+  // so it still renders first).
+  cats.forEach((c) => {
+    const summary = c.querySelector("summary");
+    if (summary && !summary.querySelector(".cat-dot")) {
+      const dot = document.createElement("span");
+      dot.className = "cat-dot";
+      summary.insertBefore(dot, summary.firstChild);
+    }
+  });
+
+  // The Mail app is only meaningful once a compose email feature is on, so move
+  // it to the end of the feature list and gray it out until PO email is enabled.
+  const mailCat = document.querySelector('details.cat[data-cat="mail"]');
+  const ttCat = document.querySelector('details.cat[data-cat="time-tracking"]');
+  const mailNote = document.getElementById("mail-disabled-note");
+  if (mailCat && ttCat) ttCat.after(mailCat);
+  // Block expanding Mail app while it's disabled.
+  if (mailCat) {
+    const sum = mailCat.querySelector("summary");
+    if (sum) sum.addEventListener("click", (e) => { if (mailCat.classList.contains("cat--disabled")) e.preventDefault(); });
+  }
+
+  // A "compose email" feature is enabled (today: PO email) — the only thing that
+  // makes the mail-app choice relevant.
+  const composeOn = (data) => data.poEmailEnabled === true;
+
+  // Is this category configured / in use? Keyed by data-cat.
+  function isOn(cat, data) {
+    switch (cat.dataset.cat) {
+      case "mail": return composeOn(data) && !!data.mailApp;
+      case "po-email": return data.poEmailEnabled === true;
+      case "bom": return !!(data.bomBaseUrl && data.bomBaseUrl.trim());
+      case "time-tracking": return data.timeTrackingEnabled === true;
+      default: return false;                     // Updates: neutral
+    }
+  }
+  function refresh() {
+    chrome.storage.local.get(["mailApp", "poEmailEnabled", "bomBaseUrl", "timeTrackingEnabled"], (data) => {
+      cats.forEach((c) => c.classList.toggle("cat--on", isOn(c, data)));
+      // Mail app gating.
+      if (mailCat) {
+        const enabled = composeOn(data);
+        mailCat.classList.toggle("cat--disabled", !enabled);
+        if (!enabled) mailCat.open = false;
+        if (mailNote) mailNote.style.display = enabled ? "none" : "block";
+      }
+    });
+  }
+  refresh();
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && (changes.mailApp || changes.poEmailEnabled || changes.bomBaseUrl || changes.timeTrackingEnabled)) refresh();
+  });
+
+  // Expand / collapse all (only categories currently shown; never expand a
+  // disabled one).
+  const setAll = (open) => cats.forEach((c) => {
+    if (c.hidden) return;
+    if (open && c.classList.contains("cat--disabled")) return;
+    c.open = open;
+  });
+  const ea = document.getElementById("expand-all");
+  const ca = document.getElementById("collapse-all");
+  if (ea) ea.addEventListener("click", () => setAll(true));
+  if (ca) ca.addEventListener("click", () => setAll(false));
+})();

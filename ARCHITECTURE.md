@@ -90,22 +90,6 @@ Using real modules where they're free (background) and the standard
 ordered-globals fallback where they're not (content) gets the same
 per-feature isolation on both sides without introducing a build step.
 
-## Configuration that must be the same for everyone
-
-Work-order emails go to a fixed list of people that changes often. That list is
-not stored in the extension: it's the membership of an Innergy employee group
-(`WO_RECIPIENT_GROUP` in `content/features/draft-email.js`), read live via
-`EmployeeListQuery` on every click. Innergy is the natural home for it —
-everyone running the extension is already authenticated there, the extension
-already holds that host permission, and the list can be edited by someone who
-has never seen this repo.
-
-The *group name* is a constant rather than an options-page setting on purpose.
-A per-user setting would let installs drift onto different lists, which is the
-opposite of what shared configuration is for. The general rule: settings that
-must agree across installs belong in Innergy; settings that are genuinely
-per-user (which mail app, the BOM app's address) belong in the options page.
-
 ## The native host
 
 `native-host/innergy_mailer_host.py` (macOS, AppleScript via `osascript`),

@@ -28,21 +28,12 @@
   }
 
   // ---- Shared Innergy access layer -------------------------------------------
-  // Every feature that needs PO / work-order / employee data from Innergy should
+  // Every feature that needs PO or other data from Innergy should
   // go through here rather than re-implementing its own fetch/query logic.
 
   function getPoId() {
     const m = location.hash.match(/purchaseOrders\/([0-9a-f-]+)/i);
     return m ? m[1] : null;
-  }
-
-  // Work-order pages live at #/projects/{projectId}/workOrder/{woId}/…
-  // Returns null on any other page, which is how features tell the two
-  // document types apart — don't infer it from a missing PO number, since
-  // getPoNumber() falls back to a literal string.
-  function getWorkOrderIds() {
-    const m = location.hash.match(/projects\/([0-9a-f-]+)\/workOrder\/([0-9a-f-]+)/i);
-    return m ? { projectId: m[1], workOrderId: m[2] } : null;
   }
 
   // Run one of Innergy's own queries against the session the user already has.
@@ -72,75 +63,6 @@
       warn(`query ${query.$type} threw:`, e);
       return null;
     }
-  }
-
-  // The work order's own number and name, e.g. { sequenceIdentifier:
-  // "P-26-1084-001p", name: "Test WO 1" }, plus the same for its project.
-  async function fetchWorkOrderInfo() {
-    const ids = getWorkOrderIds();
-    if (!ids) return null;
-    const [wo, project] = await Promise.all([
-      runQuery({ Id: ids.workOrderId, $type: "WorkOrderNumberAndNameQuery" }),
-      runQuery({ ProjectId: ids.projectId, $type: "ProjectNumberAndNameQuery" }),
-    ]);
-    if (!wo) return null;
-    return {
-      ...ids,
-      number: wo.sequenceIdentifier || "",
-      name: wo.name || "",
-      projectNumber: (project && project.sequenceIdentifier) || "",
-      projectName: (project && project.name) || "",
-    };
-  }
-
-  // Email addresses of every active member of an Innergy employee group.
-  //
-  // This is how a shared recipient list stays centrally editable: the list IS
-  // the group's membership, maintained in Innergy under Human Resources →
-  // Employee Groups. Everyone's extension reads it live, so adding or removing
-  // someone takes effect on the next draft with no extension update.
-  //
-  // Innergy has no "one group's members" query, so this pulls the employee list
-  // (one request, every employee carries its EmployeeGroups) and filters. That
-  // is what the Employees grid itself does.
-  async function fetchEmployeeGroupEmails(groupName) {
-    const wanted = String(groupName || "").trim().toLowerCase();
-    if (!wanted) return [];
-    const json = await runQuery(
-      {
-        InactiveOnly: false,
-        $type: "EmployeeListQuery",
-        LoadOptions: {
-          requireTotalCount: false,
-          isCountQuery: false,
-          skip: 0,
-          take: 1000,
-          sort: [{ selector: "FirstName", desc: false }],
-          group: null,
-          remoteGrouping: true,
-          primaryKey: null,
-          defaultSort: null,
-          $type: "DataSourceLoadOptionsDto",
-        },
-      },
-      { method: "POST" }
-    );
-    const rows = (json && json.data) || [];
-    const emails = [];
-    const seen = new Set();
-    for (const row of rows) {
-      if (row.Status !== "Active") continue;
-      const inGroup = (row.EmployeeGroups || []).some(
-        (g) => String(g && g.DisplayName || "").trim().toLowerCase() === wanted
-      );
-      if (!inGroup) continue;
-      const mail = (row.LoginEmail && row.LoginEmail.Mail ? row.LoginEmail.Mail : "").trim();
-      // Innergy stores addresses as typed, so members can differ only by case.
-      if (!mail || seen.has(mail.toLowerCase())) continue;
-      seen.add(mail.toLowerCase());
-      emails.push(mail);
-    }
-    return emails;
   }
 
   // Fetch the files attached to this PO via the same API the Files tab uses.
@@ -174,6 +96,36 @@
     }
   }
 
+  // Innergy stores notes as HTML. Email bodies are plain text, so convert:
+  // turn block/break tags into newlines, then take textContent. Parsed via
+  // DOMParser (never inserted into the page), so nothing in the note executes.
+  function htmlToText(html) {
+    if (!html) return "";
+    const withBreaks = String(html)
+      .replace(/<\s*br\s*\/?>/gi, "\n")
+      .replace(/<\/\s*(p|div|li|tr|h[1-6])\s*>/gi, "\n");
+    let text = "";
+    try {
+      text = new DOMParser().parseFromString(withBreaks, "text/html").body.textContent || "";
+    } catch (e) {
+      text = withBreaks.replace(/<[^>]*>/g, "");
+    }
+    return text
+      .replace(/ /g, " ")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+
+  // The PO's vendor-facing notes (the ones meant for the supplier), as plain
+  // text. Not the internal receivingNotes. "" when absent or unavailable.
+  async function fetchPoNotes() {
+    const poId = getPoId();
+    if (!poId) return "";
+    const data = await runQuery({ PurchaseOrderId: poId, $type: "PurchaseOrderDetailsQuery" });
+    return data ? htmlToText(data.vendorNotes || "") : "";
+  }
+
   // ---- Feature registry -------------------------------------------------------
   // Each feature file calls InnerCider.registerFeature({ id, mount }). `mount()`
   // must be cheap and idempotent — it runs on every SPA navigation/DOM mutation
@@ -185,12 +137,11 @@
   window.InnerCider = {
     log,
     warn,
+    htmlToText,
     innergy: {
       getPoId,
-      getWorkOrderIds,
       fetchPoFiles,
-      fetchWorkOrderInfo,
-      fetchEmployeeGroupEmails,
+      fetchPoNotes,
     },
     registerFeature,
     _features: features,

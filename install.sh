@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 #
-# Installs the InnerCider native messaging host so the Chrome extension
-# can hand off the exported PDF to Mail.app. Safe to re-run.
+# Installs InnerCider on macOS: the native messaging host (so the extension
+# can hand the exported PDF to Mail/Outlook) and a copy of the extension itself,
+# then opens the browser's Extensions page for the one click Chrome won't let a
+# script make. Safe to re-run.
 #
-# Usage:  ./install.sh
+# Usage:  ./install.sh    (or double-click "Install InnerCider.command")
 #
 set -euo pipefail
 
@@ -30,6 +32,14 @@ if [[ -z "$PYTHON_BIN" ]]; then
   exit 1
 fi
 PYTHON_BIN="$(cd "$(dirname "$PYTHON_BIN")" && pwd)/$(basename "$PYTHON_BIN")"
+# On a Mac without the Command Line Tools, /usr/bin/python3 is only a stub that
+# offers to install them, so being on PATH doesn't mean it runs.
+if ! "$PYTHON_BIN" -c 'import sys' >/dev/null 2>&1; then
+  echo "ERROR: $PYTHON_BIN is not usable yet." >&2
+  echo "If macOS offered to install developer tools, click Install, let it finish," >&2
+  echo "then run this installer again." >&2
+  exit 1
+fi
 echo "Using python3: $PYTHON_BIN"
 
 # 2. Copy the host into the install dir and create a wrapper that invokes it with
@@ -82,10 +92,56 @@ if [[ "$installed" -eq 0 ]]; then
   echo "WARNING: No supported browser profile directories found." >&2
 fi
 
+# 4. Copy the extension next to the host. Chrome won't let a script add an
+#    extension that isn't from the Web Store, so "Load unpacked" stays a manual
+#    click — but it should point at a folder that outlives this download: a copy
+#    loaded straight from ~/Downloads breaks the day that folder is cleaned out.
+#    The manifest "key" pins the extension ID, so the folder doesn't affect it.
+EXT_DIR="$INSTALL_DIR/extension"
+rm -rf "$EXT_DIR"
+cp -R "$SCRIPT_DIR/extension" "$EXT_DIR"
+echo "Installed extension -> $EXT_DIR"
+
+# 5. Open the Extensions page in the first Chromium-family browser found, with
+#    the folder path on the clipboard for the Load unpacked picker.
+BROWSER_APP=""
+EXT_URL=""
+for entry in "Google Chrome|chrome://extensions" \
+             "Microsoft Edge|edge://extensions" \
+             "Brave Browser|chrome://extensions" \
+             "Chromium|chrome://extensions"; do
+  app="${entry%%|*}"
+  if [[ -d "/Applications/$app.app" || -d "$HOME/Applications/$app.app" ]]; then
+    BROWSER_APP="$app"
+    EXT_URL="${entry#*|}"
+    break
+  fi
+done
+
+printf '%s' "$EXT_DIR" | pbcopy || true
+if [[ -n "$BROWSER_APP" ]]; then
+  open -a "$BROWSER_APP" "$EXT_URL" || true
+fi
+
 echo
-echo "Done. Next steps:"
-echo "  1. Open your browser's extensions page (e.g. chrome://extensions)."
-echo "  2. Enable 'Developer mode'."
-echo "  3. 'Load unpacked' and select:  $SCRIPT_DIR/extension"
-echo "  4. Confirm the extension ID is: $EXTENSION_ID"
-echo "  5. Open an Innergy PO page; click 'Draft Email w/ PDF'."
+echo "=============================================================="
+echo " One last step: add the extension to ${BROWSER_APP:-your browser}"
+echo "=============================================================="
+if [[ -n "$BROWSER_APP" ]]; then
+  echo "$BROWSER_APP is opening its Extensions page. On that page:"
+else
+  echo "Open chrome://extensions in your browser. On that page:"
+fi
+echo "  1. Turn on \"Developer mode\"."
+echo "  2. Click \"Load unpacked\"."
+echo "  3. In the folder picker press Cmd+Shift+G, paste (Cmd+V), press"
+echo "     Return, then click \"Select\". The path is on your clipboard:"
+echo "       $EXT_DIR"
+echo "  4. Check the InnerCider card shows ID $EXTENSION_ID"
+echo
+echo "Updating an existing install? Skip those steps and click the reload"
+echo "arrow on the InnerCider card instead (or quit and reopen the browser)."
+echo
+echo "Then open an Innergy PO and click \"Draft Email w/ PDF\"."
+echo "Drafts open in Apple Mail; to use Outlook, pick it in the extension's"
+echo "Options (right-click the InnerCider icon > Options)."

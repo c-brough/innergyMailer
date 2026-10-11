@@ -65,6 +65,14 @@ EOF
 chmod +x "$WRAPPER"
 echo "Installed host -> $INSTALL_DIR"
 
+# 3b. Copy the extension next to the host so it lives in a stable folder the
+#     in-app updater can overwrite (a copy loaded straight from the download
+#     breaks when that folder is cleaned out). Load unpacked from here.
+EXT_DIR="$INSTALL_DIR/extension"
+rm -rf "$EXT_DIR"
+cp -R "$SCRIPT_DIR/extension" "$EXT_DIR"
+echo "Installed extension -> $EXT_DIR"
+
 # 4. Write the native-messaging manifest for every Chromium-family browser.
 read -r -d '' MANIFEST <<EOF || true
 {
@@ -129,7 +137,7 @@ echo
 echo "Done. Next steps:"
 echo "  1. Open chromium://extensions (or chrome://extensions)."
 echo "  2. Enable 'Developer mode'."
-echo "  3. 'Load unpacked' and select:  $SCRIPT_DIR/extension"
+echo "  3. 'Load unpacked' and select:  $EXT_DIR"
 echo "  4. Confirm the extension ID is: $EXTENSION_ID"
 echo "  5. Open the extension's Options page, pick a mail app under 'Linux'."
 echo "     'Outlook on the web' also needs an Azure Client ID + one-time Sign in."

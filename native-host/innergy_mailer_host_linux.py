@@ -32,6 +32,7 @@ NOTE: stdout is reserved for the native-messaging protocol. All diagnostics go
 to host.log beside this script, never to stdout.
 """
 
+import io
 import json
 import os
 import re
@@ -39,7 +40,10 @@ import shutil
 import struct
 import subprocess
 import sys
+import tempfile
 import traceback
+import urllib.request
+import zipfile
 
 AUTHORITY = "https://login.microsoftonline.com/common"
 SCOPES = ["Mail.ReadWrite"]
@@ -85,6 +89,63 @@ def send_message(obj):
     sys.stdout.buffer.write(struct.pack("<I", len(encoded)))
     sys.stdout.buffer.write(encoded)
     sys.stdout.buffer.flush()
+
+
+# --- Self-update -------------------------------------------------------------
+GITHUB_REPO = "c-brough/innergyMailer"
+EXTRA_EXTENSION_DIRS = []
+
+
+def _extension_target():
+    candidates = [os.path.join(BASE_DIR, "extension")] + list(EXTRA_EXTENSION_DIRS)
+    for c in candidates:
+        if c and os.path.isfile(os.path.join(c, "manifest.json")):
+            return c
+    return candidates[0]
+
+
+def update_extension(branch):
+    """Download extension/ for `branch` and replace the installed folder. Returns
+    the new version string."""
+    branch = (branch or "main").strip()
+    if not re.match(r"^[A-Za-z0-9._/\-]+$", branch):
+        raise ValueError("invalid branch name")
+    target = _extension_target()
+    url = "https://codeload.github.com/%s/zip/refs/heads/%s" % (GITHUB_REPO, branch)
+    log("update: downloading %s -> %s" % (url, target))
+    req = urllib.request.Request(url, headers={"User-Agent": "InnerCider-Updater"})
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        blob = resp.read()
+    zf = zipfile.ZipFile(io.BytesIO(blob))
+    tmp = tempfile.mkdtemp(prefix="innercider-upd-")
+    try:
+        zf.extractall(tmp)
+        tops = [n for n in os.listdir(tmp) if os.path.isdir(os.path.join(tmp, n))]
+        if not tops:
+            raise RuntimeError("empty download")
+        src_ext = os.path.join(tmp, tops[0], "extension")
+        if not os.path.isdir(src_ext):
+            raise RuntimeError("no extension/ folder in the download")
+        with open(os.path.join(src_ext, "manifest.json"), "r", encoding="utf-8") as fh:
+            new_version = json.load(fh).get("version")
+        parent = os.path.dirname(target) or "."
+        os.makedirs(parent, exist_ok=True)
+        backup = target + ".bak"
+        if os.path.isdir(backup):
+            shutil.rmtree(backup, ignore_errors=True)
+        if os.path.isdir(target):
+            os.rename(target, backup)
+        try:
+            shutil.move(src_ext, target)
+        except Exception:
+            if os.path.isdir(backup) and not os.path.isdir(target):
+                os.rename(backup, target)
+            raise
+        shutil.rmtree(backup, ignore_errors=True)
+        log("update: now at v%s" % new_version)
+        return new_version
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def _write_private(path, text):
@@ -441,6 +502,15 @@ def main():
             return
 
         action = msg.get("action")
+        if action == "update":
+            try:
+                version = update_extension(msg.get("branch"))
+                send_message({"ok": True, "version": version})
+            except Exception as exc:
+                log("ERROR update: " + traceback.format_exc())
+                send_message({"ok": False, "error": str(exc)})
+            return
+
         if action == "auth_start":
             client_id = (msg.get("clientId") or "").strip()
             if not client_id:
