@@ -39,7 +39,7 @@
     generate: { label: "Generate PDF", find: () => document.querySelector(GENERATE_BTN_SELECTOR) },
     custom: { label: "Export Custom PDF", find: () => document.querySelector(EXPORT_BTN_SELECTOR) },
   };
-  const DEFAULT_PDF_SOURCE = "generate";
+  const DEFAULT_PDF_SOURCE = "custom";
   let pdfSource = DEFAULT_PDF_SOURCE;
 
   chrome.storage.local.get("pdfSource", (data) => {

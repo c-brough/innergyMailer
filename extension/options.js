@@ -92,7 +92,7 @@ document.querySelectorAll('input[name="mailApp"]').forEach((input) => {
 
 // Which Innergy button produces the PO email's PDF. Default must match
 // DEFAULT_PDF_SOURCE in content/features/draft-email.js.
-const DEFAULT_PDF_SOURCE = "generate";
+const DEFAULT_PDF_SOURCE = "custom";
 chrome.storage.local.get("pdfSource", (data) => {
   const input =
     document.querySelector(`input[name="pdfSource"][value="${data.pdfSource}"]`) ||

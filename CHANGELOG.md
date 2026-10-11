@@ -3,6 +3,12 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.12.1] - 2026-10-11
+### Changed
+- PO email: the attached PDF now defaults to **Export Custom PDF** (your default
+  report) instead of Innergy's standard Generate PDF. Switch back any time under
+  Options → PO email. (Only affects the default; an explicit choice is kept.)
+
 ## [1.12.0] - 2026-10-11
 ### Added
 - Options → PO email: editable **email header** and **footer** (with sensible
