@@ -91,6 +91,11 @@
   const toIso = (ms) => new Date(ms).toISOString(); // "…:00.000Z" wall-clock + Z
   const HOUR_MS = 3600000;
   const MIN_MS = 60000;
+  // Gaps between segments are unpaid breaks — but only up to 2 hours. A longer
+  // gap is off-shift / non-worked time, not a break, so we don't label, note, or
+  // count it.
+  const MAX_BREAK_MS = 2 * HOUR_MS;
+  const isBreak = (gap) => gap >= MIN_MS && gap <= MAX_BREAK_MS;
   const round2 = (n) => Math.round(n * 100) / 100;
 
   // Midnight (00:00 wall-clock) of the day a timestamp falls on. Our ms are
@@ -1276,7 +1281,7 @@
         if (timeMode && s.endMs != null) {
           const nextB = i < splits.length - 1 ? splits[i + 1].startMs : winEnd;
           const gap = (nextB != null ? nextB : winEnd) - s.endMs;
-          if (gap >= MIN_MS) {
+          if (isBreak(gap)) {
             const chip = document.createElement("div");
             chip.textContent = `⏸ ${fmtDuration(gap)} unpaid break`;
             Object.assign(chip.style, { margin: "-4px 0 10px 4px", color: "#8a6d3b", fontSize: "12px", fontWeight: "600" });
@@ -1305,7 +1310,14 @@
           s.startMs < s.endMs && (i === 0 || splits[i - 1].endMs <= s.startMs));
         ok = timesOk && splits.every((s) => s.picker.isValid());
         const logged = splits.reduce((a, s) => a + (s.startMs != null && s.endMs != null ? Math.max(0, s.endMs - s.startMs) : 0), 0);
-        const brk = Math.max(0, (winEnd - winStart) - logged);
+        // Sum only qualifying breaks (gaps 1 min–2 h); a longer gap is off-shift
+        // time, not a break.
+        let brk = 0, cursor = winStart;
+        splits.forEach((s) => {
+          if (s.startMs != null) { const g = s.startMs - cursor; if (isBreak(g)) brk += g; }
+          if (s.endMs != null) cursor = s.endMs;
+        });
+        const tail = winEnd - cursor; if (isBreak(tail)) brk += tail;
         text = `Logged ${fmtDuration(logged)}` + (brk >= MIN_MS ? ` · ${fmtDuration(brk)} break` : "") + ` · window ${fmtDuration(winEnd - winStart)}`;
         if (!timesOk) { text = "Fix the times: each must be within the gap, in order, and end after start."; color = "#c62828"; }
         else color = "#555";
@@ -1348,7 +1360,7 @@
       let leadingNote = "";
       if (timeMode && ctx.earlier && splits.length) {
         const lead = splits[0].startMs - winStart;
-        if (lead >= MIN_MS) leadingNote = `${fmtDuration(lead)} unpaid break auto-entered after this segment`;
+        if (isBreak(lead)) leadingNote = `${fmtDuration(lead)} unpaid break auto-entered after this segment`;
       }
 
       if (leadingNote) {
@@ -1372,7 +1384,7 @@
         splits.forEach((s, i) => {
           const nextB = i < splits.length - 1 ? splits[i + 1].startMs : winEnd;
           const gap = (nextB != null ? nextB : winEnd) - s.endMs;
-          const note = gap >= MIN_MS ? `${fmtDuration(gap)} unpaid break auto-entered after this segment` : "";
+          const note = isBreak(gap) ? `${fmtDuration(gap)} unpaid break auto-entered after this segment` : "";
           items.push({ startIso: toIso(s.startMs), endIso: toIso(s.endMs), alloc: s.picker.getAlloc(), note });
         });
       }
@@ -1584,7 +1596,7 @@
 
         // Break chip after this row (gap to the next boundary).
         const nextB = ci < arr.length - 1 ? arr[ci + 1].startMs : winEnd;
-        if (row.endMs != null && nextB != null && nextB - row.endMs >= MIN_MS && !(isAnchor && side === "before")) {
+        if (row.endMs != null && nextB != null && isBreak(nextB - row.endMs) && !(isAnchor && side === "before")) {
           const chip = document.createElement("div");
           chip.textContent = `⏸ ${fmtDuration(nextB - row.endMs)} unpaid break`;
           Object.assign(chip.style, { margin: "-4px 0 10px 4px", color: "#8a6d3b", fontSize: "12px", fontWeight: "600" });
@@ -1619,7 +1631,7 @@
       const first = newRows[0];
       if (!first || first.startMs == null) return "";
       const gap = first.startMs - anchorRow.endMs;
-      return gap >= MIN_MS ? `${fmtDuration(gap)} unpaid break auto-entered after this segment` : "";
+      return isBreak(gap) ? `${fmtDuration(gap)} unpaid break auto-entered after this segment` : "";
     }
     // Describe how the anchor will be resized, or null if unchanged.
     function anchorDelta() {
@@ -1661,7 +1673,7 @@
         const ci = arr.indexOf(r);
         const nextB = ci < arr.length - 1 ? arr[ci + 1].startMs : winEnd;
         const gap = nextB - r.endMs;
-        const note = gap >= MIN_MS ? `${fmtDuration(gap)} unpaid break auto-entered after this segment` : "";
+        const note = isBreak(gap) ? `${fmtDuration(gap)} unpaid break auto-entered after this segment` : "";
         return { startIso: toIso(r.startMs), endIso: toIso(r.endMs), alloc: r.picker.getAlloc(), note };
       });
       const res = await createSegments(ctx.employeeId, items);

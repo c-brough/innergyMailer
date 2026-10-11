@@ -3,6 +3,12 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.10.1] - 2026-10-11
+### Changed
+- Time Tracking: gaps longer than **2 hours** are no longer treated as unpaid
+  breaks — they aren't labeled, noted, or counted (a longer gap is off-shift
+  time, not a break). Breaks of 1 min–2 h behave as before.
+
 ## [1.10.0] - 2026-10-11
 ### Added
 - Options: each feature's category shows a **green dot + tint when it's enabled
