@@ -8,8 +8,11 @@
  * token in chrome.storage.local for silent reuse.
  *
  * Azure app setup (one-time, same Client ID as the device-code option):
- *   - Add a redirect URI of type "Mobile and desktop applications":
+ *   - Add a redirect URI under the "Single-page application" platform:
  *       https://<extension-id>.chromiumapp.org/   (shown on the Options page)
+ *     It MUST be SPA, not "Mobile and desktop" — the token is redeemed
+ *     cross-origin (the extension sends an Origin header), which Azure permits
+ *     only for the SPA client type (else AADSTS9002326).
  *   - Add the delegated permission Mail.Send.
  */
 

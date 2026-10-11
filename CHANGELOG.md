@@ -3,6 +3,14 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.9.1] - 2026-10-11
+### Fixed
+- Compose-and-send: corrected the Azure setup — the redirect URI must be
+  registered under the **Single-page application** platform (not "Mobile and
+  desktop"), otherwise sign-in fails with AADSTS9002326.
+- Hid the device-code "Sign in" button for the compose-and-send option (it
+  signs in automatically on first Send) to avoid a confusing error.
+
 ## [1.9.0] - 2026-10-11
 ### Added
 - **Outlook on the web — compose & send here.** A new global mail-app option

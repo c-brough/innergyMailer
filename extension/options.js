@@ -35,6 +35,13 @@ const graphFieldset = document.getElementById("fs-graph");
 function updateGraphVisibility(value) {
   const needsGraph = GRAPH_APPS.includes(value);
   graphFieldset.style.display = needsGraph ? "block" : "none";
+  // The compose-and-send option signs in via chrome.identity on first Send, not
+  // the device-code "Sign in" button — hide that button and show a note instead.
+  const isModal = value === "outlook_web_modal";
+  const authBtn = document.getElementById("auth-btn");
+  const owaNote = document.getElementById("owa-signin-note");
+  if (authBtn) authBtn.style.display = isModal ? "none" : "";
+  if (owaNote) owaNote.style.display = isModal ? "block" : "none";
   if (!needsGraph) {
     document.getElementById("graph-help").style.display = "none";
     resetHelpButtons();

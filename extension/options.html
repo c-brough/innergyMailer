@@ -269,13 +269,14 @@
             <strong>One-time Azure setup</strong> (uses the same Client ID as the Graph sign-in above):
             <ol>
               <li>In your Azure app → <strong>Authentication</strong> → <strong>Add a platform</strong> →
-                <strong>Mobile and desktop applications</strong> → add this redirect URI:
+                <strong>Single-page application</strong> (not "Mobile and desktop" — the sign-in is
+                cross-origin and Azure only allows that for SPA) → add this redirect URI:
                 <br /><code id="owa-redirect-uri">loading…</code></li>
               <li>Under <strong>API permissions</strong> → <strong>Microsoft Graph</strong> →
                 <strong>Delegated</strong> → add <code>Mail.Send</code>.</li>
-              <li>Paste the <strong>Client ID</strong> in the Microsoft Graph sign-in box below. The
-                first time you click <strong>Send</strong>, a Microsoft sign-in window appears; after
-                that it's remembered.</li>
+              <li>Paste the <strong>Client ID</strong> in the box below. Don't use the "Sign in"
+                button (that's the device-code flow for Windows/Linux) — for this option a Microsoft
+                sign-in window appears the first time you click <strong>Send</strong>, then it's remembered.</li>
             </ol>
           </div>
         </fieldset>
@@ -310,6 +311,10 @@
               <button id="auth-btn">Sign in</button>
             </div>
             <div id="auth-status" class="inf"></div>
+            <!-- Shown for the compose-and-send option, which signs in on first Send. -->
+            <div id="owa-signin-note" style="display:none; font-size:12px; color:#555; margin-top:6px;">
+              Just paste the Client ID — you'll sign in automatically the first time you click Send.
+            </div>
           </div>
         </fieldset>
       </div>
