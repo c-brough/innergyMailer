@@ -418,6 +418,8 @@
       employeeId: early.EmployeeId,
       employeeName: early.EmployeeFullName,
       gapStart, gapEnd,
+      earlier: { id: early.Id, startMs: toMs(early.StartTime), endMs: gapStart },
+      later: { id: late.Id, startMs: gapEnd, endMs: toMs(late.EndTime) },
       statusFiltered: !!state.statusFiltered,
     });
   }
@@ -1034,6 +1036,34 @@
     return { overlay, card };
   }
 
+  // A small confirmation dialog listing exactly what will change to EXISTING
+  // entries (resize / note). Stacks on top of the form modal. Resolves true on
+  // confirm, false on cancel/backdrop. Used before any save that edits an entry.
+  function confirmDialog(title, lines) {
+    return new Promise((resolve) => {
+      const { overlay, card } = modalOverlay();
+      card.style.width = "460px";
+      const h = document.createElement("div"); h.textContent = title;
+      Object.assign(h.style, { fontWeight: "700", fontSize: "15px", marginBottom: "10px" });
+      const body = document.createElement("div");
+      Object.assign(body.style, { fontSize: "13px", color: "#333", lineHeight: "1.5" });
+      lines.forEach((l) => { const d = document.createElement("div"); d.textContent = "• " + l; d.style.marginBottom = "4px"; body.appendChild(d); });
+      const btns = document.createElement("div");
+      Object.assign(btns.style, { display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "16px" });
+      const cancel = document.createElement("button"); cancel.type = "button"; cancel.textContent = "Cancel";
+      Object.assign(cancel.style, { padding: "8px 14px", borderRadius: "6px", border: "1px solid #ccc", background: "#f3f3f3", cursor: "pointer", fontWeight: "600" });
+      const ok = document.createElement("button"); ok.type = "button"; ok.textContent = "Confirm & save";
+      Object.assign(ok.style, { padding: "8px 14px", borderRadius: "6px", border: "none", background: "#1a56db", color: "#fff", fontWeight: "600", cursor: "pointer" });
+      let done = false;
+      const finish = (v) => { if (done) return; done = true; overlay.remove(); resolve(v); };
+      cancel.addEventListener("click", () => finish(false));
+      ok.addEventListener("click", () => finish(true));
+      overlay.addEventListener("click", (e) => { if (e.target === overlay) finish(false); });
+      btns.append(cancel, ok); card.append(h, body, btns);
+      document.body.appendChild(overlay);
+    });
+  }
+
   // One gap-filling segment: choose the allocation (generic activity, or
   // Job → Work Order → Activity), then create it. Opens instantly; lists fill in.
   function openSingleForm(ctx) {
@@ -1311,8 +1341,25 @@
     create.type = "button"; create.textContent = "Create segments";
     Object.assign(create.style, { padding: "8px 14px", borderRadius: "6px", border: "none", background: "#1a56db", color: "#fff", fontWeight: "600" });
     create.addEventListener("click", async () => {
-      create.disabled = true; create.textContent = "Creating…";
       const items = [];
+      // Leading break: a gap between the earlier existing segment and the first
+      // new one. Its "prior" segment is that existing entry, so the note goes on
+      // it (an edit) — only possible in time mode and when we know the earlier id.
+      let leadingNote = "";
+      if (timeMode && ctx.earlier && splits.length) {
+        const lead = splits[0].startMs - winStart;
+        if (lead >= MIN_MS) leadingNote = `${fmtDuration(lead)} unpaid break auto-entered after this segment`;
+      }
+
+      if (leadingNote) {
+        const okGo = await confirmDialog("Confirm change to existing time", [
+          `A break note will be added to the earlier segment (above): "${leadingNote}".`,
+          `${splits.length} new segment${splits.length === 1 ? "" : "s"} will be created.`,
+        ]);
+        if (!okGo) return;
+      }
+
+      create.disabled = true; create.textContent = "Creating…";
       if (!timeMode) {
         // Contiguous ranges; the last ends exactly at winEnd to avoid drift.
         let cursor = winStart;
@@ -1330,13 +1377,25 @@
         });
       }
       const res = await createSegments(ctx.employeeId, items);
+      // Stamp the leading break on the earlier existing segment (time unchanged).
+      let leadErr = "";
+      if (leadingNote) {
+        const dto = await loadEditDto(ctx.employeeId, ctx.earlier.id);
+        if (dto && dto.Activity) {
+          const note = (dto.Note ? dto.Note + " · " : "") + leadingNote;
+          const er = await editSegmentTime(ctx.employeeId, dto, toIso(ctx.earlier.startMs), toIso(ctx.earlier.endMs), note);
+          if (!er.ok) leadErr = er.error;
+        } else { leadErr = "couldn't load the earlier segment"; }
+      }
       overlay.remove();
-      if (res.created && !res.failed) {
+      if (res.created && !res.failed && !leadErr) {
         banner(true, `Added ${res.created} segment${res.created === 1 ? "" : "s"} for ${ctx.employeeName}.`);
-      } else if (res.created) {
-        banner(false, `Added ${res.created}, but ${res.failed} failed: ${res.firstError}`);
       } else {
-        banner(false, `Couldn't add segments: ${res.firstError || "unknown error"}`);
+        const parts = [];
+        if (res.created) parts.push(`added ${res.created}`);
+        if (res.failed) parts.push(`${res.failed} failed: ${res.firstError}`);
+        if (leadErr) parts.push(`break note not added: ${leadErr}`);
+        banner(false, parts.join("; ") || "Couldn't add segments.");
       }
       refreshGrid();
     });
@@ -1514,7 +1573,8 @@
 
         if (isAnchor) {
           const info = document.createElement("div");
-          info.textContent = anchorLoadFailed ? "Couldn't load this segment — it can't be shrunk." : `${anchorLabel}${anchorMoved() ? " · will shrink to make room" : ""}`;
+          const dlt = anchorDelta();
+          info.textContent = anchorLoadFailed ? "Couldn't load this segment — it can't be resized." : `${anchorLabel}${dlt ? ` · will ${dlt.verb} by ${fmtDuration(dlt.amount)}` : ""}`;
           Object.assign(info.style, { marginTop: "6px", color: anchorLoadFailed ? "#c62828" : "#5a6b86", fontSize: "12px" });
           cardRow.appendChild(info);
         } else {
@@ -1544,7 +1604,8 @@
       const dtoOk = !needDto || (!!anchorDto && !anchorLoadFailed);
       const ok = timesOk && pickersOk && dtoOk;
       const added = newRows.reduce((a, r) => a + Math.max(0, (r.endMs || 0) - (r.startMs || 0)), 0);
-      let text = `Adding ${fmtDuration(added)}` + (anchorMoved() ? " · existing shrinks" : "");
+      const delta = anchorDelta();
+      let text = `Adding ${fmtDuration(added)}` + (delta ? ` · existing ${delta.verb}s ${fmtDuration(delta.amount)}` : "");
       let color = "#555";
       if (!timesOk) { text = "Fix the times: each must be within the window, in order, and end after start."; color = "#c62828"; }
       else if (!dtoOk) { text = anchorLoadFailed ? "Can't shrink the existing segment (load failed)." : "Loading the existing segment…"; color = "#c62828"; }
@@ -1560,6 +1621,12 @@
       const gap = first.startMs - anchorRow.endMs;
       return gap >= MIN_MS ? `${fmtDuration(gap)} unpaid break auto-entered after this segment` : "";
     }
+    // Describe how the anchor will be resized, or null if unchanged.
+    function anchorDelta() {
+      if (!anchorMoved()) return null;
+      const origDur = origEnd - origStart, newDur = anchorRow.endMs - anchorRow.startMs;
+      return { verb: newDur < origDur ? "shrink" : "grow", amount: Math.abs(newDur - origDur) };
+    }
 
     addBtn.type = "button";
     addBtn.textContent = "+ Add segment";
@@ -1574,6 +1641,19 @@
     create.type = "button"; create.textContent = "Create";
     Object.assign(create.style, { padding: "8px 14px", borderRadius: "6px", border: "none", background: "#1f9d57", color: "#fff", fontWeight: "600" });
     create.addEventListener("click", async () => {
+      // Confirm anything that touches the EXISTING segment (resize and/or note).
+      const willEdit = (anchorMoved() || anchorNoteText()) && anchorDto;
+      if (willEdit) {
+        const lines = [];
+        const delta = anchorDelta();
+        if (delta) {
+          lines.push(`Existing segment will ${delta.verb} by ${fmtDuration(delta.amount)}: ${fmtTime(origStart)}–${fmtTime(origEnd)} → ${fmtTime(anchorRow.startMs)}–${fmtTime(anchorRow.endMs)}.`);
+        }
+        if (anchorNoteText()) lines.push(`A break note will be added to the existing segment.`);
+        lines.push(`${newRows.length} new segment${newRows.length === 1 ? "" : "s"} will be created.`);
+        const okGo = await confirmDialog("Confirm changes to existing time", lines);
+        if (!okGo) return;
+      }
       create.disabled = true; create.textContent = "Saving…";
       const arr = composed();
       // New-segment create items, with break notes for gaps that follow them.
