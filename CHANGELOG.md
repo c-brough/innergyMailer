@@ -3,6 +3,15 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.9.2] - 2026-10-11
+### Changed
+- Compose-and-send modal: recipients now behave like a desktop mail client —
+  typing an address and pressing space, comma, Enter, or Tab turns it into a
+  removable chip; click a chip to edit it, Backspace to pull the last one back.
+- The compose window is now ~75% of the browser viewport, with the body growing
+  to fill it.
+- The PO email body uses a cleaner, more professional purchase-order layout.
+
 ## [1.9.1] - 2026-10-11
 ### Fixed
 - Compose-and-send: corrected the Azure setup — the redirect URI must be

@@ -378,9 +378,16 @@
     const tag = commonLineTag(items);
     const subject = tag ? `${poNumber} - ${vendor} - ${tag}` : `${poNumber} - ${vendor}`;
     const body =
-      `${poNumber}\nVendor: ${vendor}\n\n` +
+      `Hello,\n\n` +
+      `Please find attached purchase order ${poNumber}${vendor ? ` for ${vendor}` : ""}. ` +
+      `A summary of the ordered items is below, with the full purchase order attached as a PDF.\n\n` +
+      `Purchase Order:  ${poNumber}\n` +
+      (vendor ? `Vendor:          ${vendor}\n` : "") +
+      `\nItems\n` +
       `${buildSummary(items, includePricing)}\n` +
-      (poNotes ? `\nPO Notes:\n${poNotes}\n` : "");
+      (poNotes ? `\nNotes\n${poNotes}\n` : "") +
+      `\nPlease confirm receipt of this order and the expected ship date.\n\n` +
+      `Thank you,\n`;
 
     if (!to) {
       IC.warn("No vendor contact email found; drafting without a recipient.");
@@ -599,6 +606,98 @@
   // the corner banner, so the modal can show "Sending…/Sent" and clear itself.
   let composeOnResult = null;
 
+  // A desktop-style recipient field: valid addresses become removable chips when
+  // the user presses space/comma/enter/tab (or blurs). Clicking a chip puts it
+  // back into the text box to edit; Backspace in an empty box edits the last.
+  function buildRecipientField(initial) {
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    let recips = (initial || []).slice();
+
+    const wrap = document.createElement("div");
+    Object.assign(wrap.style, {
+      display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px",
+      padding: "5px 7px", border: "1px solid #ccc", borderRadius: "6px",
+      minHeight: "34px", boxSizing: "border-box", cursor: "text", background: "#fff",
+    });
+    const input = document.createElement("input");
+    input.type = "text"; input.placeholder = recips.length ? "" : "recipient@example.com";
+    Object.assign(input.style, {
+      flex: "1", minWidth: "160px", border: "none", outline: "none",
+      font: "13px -apple-system, system-ui, sans-serif", padding: "3px 2px",
+    });
+
+    function flashInvalid() {
+      wrap.style.borderColor = "#e23b3b";
+      setTimeout(() => { wrap.style.borderColor = "#ccc"; }, 900);
+    }
+    function render() {
+      wrap.querySelectorAll(".ic-chip").forEach((c) => c.remove());
+      recips.forEach((email) => {
+        const chip = document.createElement("span");
+        chip.className = "ic-chip";
+        Object.assign(chip.style, {
+          display: "inline-flex", alignItems: "center", gap: "6px", maxWidth: "100%",
+          padding: "2px 6px 2px 9px", background: "#eef2fd", border: "1px solid #c7d0f8",
+          borderRadius: "12px", fontSize: "12.5px", color: "#1a3a8a",
+        });
+        const label = document.createElement("span");
+        label.textContent = email; label.title = "Click to edit";
+        Object.assign(label.style, { cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" });
+        label.addEventListener("mousedown", (e) => { e.preventDefault(); edit(email); });
+        const x = document.createElement("span");
+        x.textContent = "✕"; x.title = "Remove";
+        Object.assign(x.style, { cursor: "pointer", color: "#6b7aa8", fontSize: "11px" });
+        x.addEventListener("mousedown", (e) => { e.preventDefault(); remove(email); });
+        chip.append(label, x);
+        wrap.insertBefore(chip, input);
+      });
+      input.placeholder = recips.length ? "" : "recipient@example.com";
+    }
+    function commit(text) {
+      const t = (text || "").trim().replace(/[,;]+$/, "").trim();
+      if (!t) return true;
+      if (EMAIL_RE.test(t)) { if (!recips.includes(t)) recips.push(t); render(); return true; }
+      return false;
+    }
+    function remove(email) { recips = recips.filter((r) => r !== email); render(); input.focus(); }
+    function edit(email) {
+      // Commit whatever's typed, then pull the chosen chip back into the box.
+      if (input.value.trim() && !commit(input.value)) { flashInvalid(); return; }
+      recips = recips.filter((r) => r !== email);
+      input.value = email; render(); input.focus();
+    }
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === "," || e.key === " " || e.key === ";" || e.key === "Tab") {
+        if (!input.value.trim()) return; // let Tab move on when empty
+        e.preventDefault();
+        if (commit(input.value)) input.value = "";
+        else flashInvalid();
+      } else if (e.key === "Backspace" && input.value === "" && recips.length) {
+        e.preventDefault();
+        edit(recips[recips.length - 1]);
+      }
+    });
+    input.addEventListener("blur", () => { if (input.value.trim() && !commit(input.value)) return; if (EMAIL_RE.test(input.value.trim())) input.value = ""; });
+    input.addEventListener("paste", (e) => {
+      const text = (e.clipboardData || window.clipboardData).getData("text");
+      if (text && /[,;\s]/.test(text)) {
+        e.preventDefault();
+        text.split(/[,;\s]+/).forEach((p) => commit(p));
+        input.value = "";
+      }
+    });
+    wrap.addEventListener("mousedown", (e) => { if (e.target === wrap) { e.preventDefault(); input.focus(); } });
+
+    wrap.appendChild(input);
+    render();
+    return {
+      el: wrap,
+      focus: () => input.focus(),
+      getRecipients: () => { commit(input.value) && (input.value = ""); return recips.slice(); },
+    };
+  }
+
   function openComposeModal(ctx, undecidedFiles, { onSend, onCancel }) {
     document.getElementById("innercider-compose")?.remove();
     const overlay = document.createElement("div");
@@ -610,17 +709,20 @@
     });
     const card = document.createElement("div");
     Object.assign(card.style, {
-      background: "#fff", color: "#1a1a1a", borderRadius: "10px", padding: "18px 20px",
-      width: "600px", maxWidth: "94vw", maxHeight: "88vh", overflowY: "auto", boxShadow: "0 8px 30px rgba(0,0,0,.3)",
+      background: "#fff", color: "#1a1a1a", borderRadius: "10px", padding: "18px 22px",
+      width: "75vw", height: "75vh", maxWidth: "75vw", maxHeight: "75vh",
+      boxShadow: "0 8px 30px rgba(0,0,0,.3)", display: "flex", flexDirection: "column",
     });
 
     const h = document.createElement("div");
     h.textContent = "New email — Outlook on the web";
-    Object.assign(h.style, { fontWeight: "700", fontSize: "16px", marginBottom: "12px" });
+    Object.assign(h.style, { fontWeight: "700", fontSize: "16px", marginBottom: "12px", flex: "0 0 auto" });
 
-    const mkField = (labelText, el) => {
+    const mkField = (labelText, el, grow) => {
       const wrap = document.createElement("div");
-      wrap.style.marginBottom = "10px";
+      Object.assign(wrap.style, grow
+        ? { marginBottom: "10px", flex: "1 1 auto", display: "flex", flexDirection: "column", minHeight: "0" }
+        : { marginBottom: "10px", flex: "0 0 auto" });
       const lab = document.createElement("div");
       lab.textContent = labelText;
       Object.assign(lab.style, { fontSize: "12px", fontWeight: "600", color: "#555", marginBottom: "4px" });
@@ -631,17 +733,15 @@
       width: "100%", boxSizing: "border-box", padding: "7px 9px", border: "1px solid #ccc",
       borderRadius: "6px", font: "13px -apple-system, system-ui, sans-serif",
     };
-    const toIn = document.createElement("input");
-    toIn.type = "text"; toIn.value = (ctx.recipients || []).join(", ");
-    toIn.placeholder = "recipient@example.com"; Object.assign(toIn.style, inputStyle);
+    const toField = buildRecipientField(ctx.recipients);
     const subjIn = document.createElement("input");
     subjIn.type = "text"; subjIn.value = ctx.subject || ""; Object.assign(subjIn.style, inputStyle);
     const bodyIn = document.createElement("textarea");
-    bodyIn.value = ctx.body || ""; bodyIn.rows = 11;
-    Object.assign(bodyIn.style, inputStyle, { resize: "vertical", fontFamily: "ui-monospace, monospace", fontSize: "12.5px", lineHeight: "1.45" });
+    bodyIn.value = ctx.body || "";
+    Object.assign(bodyIn.style, inputStyle, { flex: "1 1 auto", minHeight: "120px", resize: "none", fontFamily: "ui-monospace, monospace", fontSize: "12.5px", lineHeight: "1.5" });
 
     const att = document.createElement("div");
-    Object.assign(att.style, { margin: "4px 0 2px", fontSize: "12.5px", color: "#3a5a44" });
+    Object.assign(att.style, { margin: "4px 0 2px", fontSize: "12.5px", color: "#3a5a44", flex: "0 0 auto" });
     att.textContent = "📎 The PO PDF attaches automatically.";
     const checks = [];
     if (undecidedFiles && undecidedFiles.length) {
@@ -659,10 +759,10 @@
     }
 
     const status = document.createElement("div");
-    Object.assign(status.style, { minHeight: "16px", fontSize: "12.5px", margin: "10px 0 0" });
+    Object.assign(status.style, { minHeight: "16px", fontSize: "12.5px", margin: "10px 0 0", flex: "0 0 auto" });
 
     const btns = document.createElement("div");
-    Object.assign(btns.style, { display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "14px" });
+    Object.assign(btns.style, { display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "12px", flex: "0 0 auto" });
     const discard = document.createElement("button"); discard.type = "button"; discard.textContent = "Discard";
     Object.assign(discard.style, { padding: "8px 14px", borderRadius: "6px", border: "1px solid #ccc", background: "#f3f3f3", cursor: "pointer", fontWeight: "600" });
     const send = document.createElement("button"); send.type = "button"; send.textContent = "Send";
@@ -678,7 +778,7 @@
     document.addEventListener("keydown", onKey, true);
 
     send.addEventListener("click", () => {
-      const recipients = toIn.value.split(/[,;]/).map((s) => s.trim()).filter(Boolean);
+      const recipients = toField.getRecipients();
       if (!recipients.length) {
         status.textContent = "Add at least one recipient."; status.style.color = "#c62828";
         return;
@@ -702,11 +802,11 @@
       onSend({ recipients, subject: subjIn.value, body: bodyIn.value }, checked);
     });
 
-    card.append(h, mkField("To", toIn), mkField("Subject", subjIn), mkField("Body", bodyIn), att, status, btns);
+    card.append(h, mkField("To", toField.el), mkField("Subject", subjIn), mkField("Body", bodyIn, true), att, status, btns);
     btns.append(discard, send);
     overlay.appendChild(card);
     document.body.appendChild(overlay);
-    toIn.focus();
+    toField.focus();
   }
 
   // ---- Outcome banner -----------------------------------------------------------
