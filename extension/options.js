@@ -99,6 +99,16 @@ document.querySelectorAll('input[name="pdfSource"]').forEach((input) => {
   });
 });
 
+// Include line-item pricing (extended cost) in the PO email body. Off by default.
+const pricingBox = document.getElementById("include-pricing");
+chrome.storage.local.get("includePricing", (data) => {
+  pricingBox.checked = data.includePricing === true;
+});
+pricingBox.addEventListener("change", (e) => {
+  chrome.storage.local.set({ includePricing: e.target.checked });
+  showSaved();
+});
+
 // Save client ID as the user types (debounced).
 let saveTimer;
 document.getElementById("client-id").addEventListener("input", (e) => {
@@ -227,3 +237,49 @@ function showSaved() {
   el.textContent = "Saved";
   setTimeout(() => (el.textContent = ""), 1500);
 }
+
+// ---- Time Tracking Tools (opt-in) --------------------------------------------
+// Off by default; only turned on for people who edit/approve time. The content
+// feature (content/features/time-tracking.js) reads `timeTrackingEnabled`.
+const ttBox = document.getElementById("tt-enabled");
+chrome.storage.local.get("timeTrackingEnabled", (data) => {
+  ttBox.checked = data.timeTrackingEnabled === true;
+});
+ttBox.addEventListener("change", (e) => {
+  chrome.storage.local.set({ timeTrackingEnabled: e.target.checked });
+  showSaved();
+});
+
+// ---- Settings search ---------------------------------------------------------
+// Filters the collapsible categories: a query shows only the categories whose
+// text matches, opens them, and scrolls the first match into view. Clearing
+// restores the default (first category open, the rest collapsed).
+(() => {
+  const search = document.getElementById("opt-search");
+  const noResults = document.getElementById("no-results");
+  const cats = Array.from(document.querySelectorAll("details.cat"));
+  const defaultOpen = new Map(cats.map((c) => [c, c.open]));
+
+  function apply() {
+    const q = search.value.trim().toLowerCase();
+    if (!q) {
+      cats.forEach((c) => {
+        c.hidden = false;
+        c.open = defaultOpen.get(c);
+      });
+      noResults.style.display = "none";
+      return;
+    }
+    let first = null;
+    for (const c of cats) {
+      const match = c.textContent.toLowerCase().includes(q);
+      c.hidden = !match;
+      c.open = match;
+      if (match && !first) first = c;
+    }
+    noResults.style.display = first ? "none" : "block";
+    if (first) first.scrollIntoView({ block: "nearest" });
+  }
+
+  search.addEventListener("input", apply);
+})();

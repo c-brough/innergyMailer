@@ -22,7 +22,10 @@
     },
     {
       "matches": ["https://app.innergy.com/*"],
-      "js": ["content/features/export-capture-main.js"],
+      "js": [
+        "content/features/export-capture-main.js",
+        "content/features/materials-read-main.js"
+      ],
       "run_at": "document_start",
       "world": "MAIN"
     }

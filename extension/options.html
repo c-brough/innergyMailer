@@ -7,16 +7,51 @@
       body {
         font: 14px -apple-system, system-ui, sans-serif;
         color: #1a1a1a;
-        max-width: 480px;
+        max-width: 520px;
         margin: 32px auto;
         padding: 0 20px;
       }
       h1 { font-size: 18px; margin-bottom: 4px; }
       p.sub { color: #666; margin-top: 0; }
-      fieldset { border: 1px solid #ddd; border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; }
-      legend { font-weight: 600; padding: 0 6px; }
-      label.opt { display: flex; align-items: center; gap: 10px; padding: 8px 0; cursor: pointer; }
-      label.opt input[type="radio"] { width: 16px; height: 16px; }
+
+      /* ---- Search + collapsible categories ------------------------------ */
+      .search-wrap { position: relative; margin: 14px 0 18px; }
+      #opt-search {
+        width: 100%; box-sizing: border-box; font: 14px -apple-system, system-ui, sans-serif;
+        padding: 9px 12px 9px 32px; border: 1px solid #ccc; border-radius: 8px;
+      }
+      .search-wrap::before {
+        content: "🔍"; position: absolute; left: 10px; top: 50%;
+        transform: translateY(-50%); font-size: 13px; opacity: .6;
+      }
+      #no-results { display: none; color: #888; font-size: 13px; padding: 6px 2px; }
+
+      details.cat {
+        border: 1px solid #e2e2e2; border-radius: 10px; margin-bottom: 10px;
+        background: #fafafa; overflow: hidden;
+      }
+      details.cat[hidden] { display: none; }
+      details.cat > summary {
+        cursor: pointer; padding: 12px 14px; font-weight: 700; font-size: 15px;
+        list-style: none; display: flex; align-items: center; gap: 8px;
+      }
+      details.cat > summary::-webkit-details-marker { display: none; }
+      details.cat > summary::before {
+        content: "▸"; color: #999; font-size: 12px; transition: transform .15s ease;
+      }
+      details.cat[open] > summary::before { transform: rotate(90deg); }
+      details.cat > summary .cat-tag {
+        margin-left: auto; font-size: 10px; font-weight: 600; text-transform: uppercase;
+        letter-spacing: .04em; color: #777; background: #f0f0f0; border: 1px solid #ddd;
+        border-radius: 3px; padding: 1px 5px;
+      }
+      .cat-body { padding: 2px 14px 12px; }
+
+      /* Inside a category, fieldsets are borderless subsections. */
+      fieldset { border: none; padding: 6px 0 0; margin: 0 0 10px; }
+      legend { font-weight: 600; padding: 0; font-size: 13px; color: #333; }
+      label.opt { display: flex; align-items: center; gap: 10px; padding: 7px 0; cursor: pointer; }
+      label.opt input[type="radio"], label.opt input[type="checkbox"] { width: 16px; height: 16px; }
       label.opt.disabled { opacity: 0.38; cursor: not-allowed; }
       label.opt.disabled input { pointer-events: none; }
 
@@ -55,7 +90,10 @@
       #auth-status.err { color: #c62828; }
       #auth-status.inf { color: #555; }
 
-      #status { margin-top: 14px; height: 18px; color: #2e7d32; font-weight: 600; }
+      #status {
+        position: sticky; bottom: 0; margin-top: 14px; height: 20px;
+        color: #2e7d32; font-weight: 600; background: #fff;
+      }
 
       .fs-note { margin: 0 0 10px; font-size: 13px; color: #444; line-height: 1.5; }
       .chip-demo {
@@ -81,112 +119,162 @@
     <h1>InnerCider</h1>
     <p class="sub">Settings for the Innergy tools.</p>
 
-    <p class="fs-note">Which app should open the drafted PO email:</p>
-
-    <fieldset id="fs-mac">
-      <legend>macOS</legend>
-      <label class="opt" id="opt-mail">
-        <input type="radio" name="mailApp" value="mail" />
-        Apple Mail
-      </label>
-      <label class="opt" id="opt-outlook-mac">
-        <input type="radio" name="mailApp" value="outlook" />
-        Microsoft Outlook (Mac)
-      </label>
-    </fieldset>
-
-    <fieldset id="fs-win">
-      <legend>Windows</legend>
-      <label class="opt" id="opt-outlook-classic">
-        <input type="radio" name="mailApp" value="outlook_classic" />
-        Outlook Classic (Win)
-      </label>
-      <label class="opt" id="opt-outlook-new">
-        <input type="radio" name="mailApp" value="outlook_new" />
-        New Outlook (Win)
-        <button type="button" class="help-btn graph-help-btn" title="Azure setup instructions">?</button>
-      </label>
-    </fieldset>
-
-    <fieldset id="fs-linux">
-      <legend>Linux</legend>
-      <label class="opt" id="opt-outlook-web">
-        <input type="radio" name="mailApp" value="outlook_web" />
-        Outlook on the web
-        <button type="button" class="help-btn graph-help-btn" title="Azure setup instructions">?</button>
-      </label>
-      <label class="opt" id="opt-linux-mail">
-        <input type="radio" name="mailApp" value="linux_mail" />
-        Default mail client (Thunderbird, Evolution…)
-      </label>
-      <p class="fs-note" id="linux-note">
-        Linux has no Outlook desktop app, so <strong>Outlook on the web</strong> is
-        the reliable route — the draft is created in your Microsoft 365 mailbox and
-        opened in a new tab. <strong>Default mail client</strong> needs a mail app
-        actually installed (Raspberry Pi OS ships none); without one, InnerCider
-        refuses rather than opening a compose window with the PDF missing.
-      </p>
-    </fieldset>
-
-    <!-- Sits OUTSIDE #fs-graph on purpose: the whole point of the "?" button is
-         reading these instructions BEFORE picking a Graph option, and #fs-graph
-         is hidden until one is selected. Nesting it there would make the button
-         a no-op in the default state. -->
-    <div id="graph-help">
-      <strong>Azure App Registration — one-time setup</strong>
-      <ol>
-        <li>Go to <a href="https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank">portal.azure.com</a> → <strong>App registrations</strong> → <strong>New registration</strong>.<br>
-          Name: anything (e.g. <code>InnerCider</code>)<br>
-          Supported account types: <strong>Accounts in any organizational directory and personal Microsoft accounts</strong><br>
-          Redirect URI: leave blank → click <strong>Register</strong>
-        </li>
-        <li>Copy the <strong>Application (client) ID</strong> from the overview page.</li>
-        <li>Under <strong>API permissions</strong> → <strong>Add a permission</strong> → <strong>Microsoft Graph</strong> → <strong>Delegated</strong> → add <code>Mail.ReadWrite</code>.</li>
-        <li>Paste the Client ID below and click <strong>Sign in</strong>. A browser tab opens — sign in with your Microsoft account. The token is cached so you only do this once.</li>
-      </ol>
+    <div class="search-wrap">
+      <input id="opt-search" type="search" placeholder="Search settings…" autocomplete="off" />
     </div>
+    <p id="no-results">No settings match that search.</p>
 
-    <fieldset id="fs-graph">
-      <legend>Microsoft Graph sign-in</legend>
-      <div id="graph-setup">
-        <p>This option requires a one-time Microsoft sign-in via the Graph API.
-          <a href="https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank">Register a free Azure app</a>
-          and paste the <strong>Application (client) ID</strong> below.
-        </p>
-        <div id="client-id-row">
-          <input id="client-id" type="text" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" spellcheck="false" />
-          <button id="auth-btn">Sign in</button>
+    <!-- ===== Mail app =============================================== -->
+    <details class="cat" data-cat="mail" open>
+      <summary>Mail app</summary>
+      <div class="cat-body">
+        <p class="fs-note">Which app should open the drafted PO email:</p>
+
+        <fieldset id="fs-mac">
+          <legend>macOS</legend>
+          <label class="opt" id="opt-mail">
+            <input type="radio" name="mailApp" value="mail" />
+            Apple Mail
+          </label>
+          <label class="opt" id="opt-outlook-mac">
+            <input type="radio" name="mailApp" value="outlook" />
+            Microsoft Outlook (Mac)
+          </label>
+        </fieldset>
+
+        <fieldset id="fs-win">
+          <legend>Windows</legend>
+          <label class="opt" id="opt-outlook-classic">
+            <input type="radio" name="mailApp" value="outlook_classic" />
+            Outlook Classic (Win)
+          </label>
+          <label class="opt" id="opt-outlook-new">
+            <input type="radio" name="mailApp" value="outlook_new" />
+            New Outlook (Win)
+            <button type="button" class="help-btn graph-help-btn" title="Azure setup instructions">?</button>
+          </label>
+        </fieldset>
+
+        <fieldset id="fs-linux">
+          <legend>Linux</legend>
+          <label class="opt" id="opt-outlook-web">
+            <input type="radio" name="mailApp" value="outlook_web" />
+            Outlook on the web
+            <button type="button" class="help-btn graph-help-btn" title="Azure setup instructions">?</button>
+          </label>
+          <label class="opt" id="opt-linux-mail">
+            <input type="radio" name="mailApp" value="linux_mail" />
+            Default mail client (Thunderbird, Evolution…)
+          </label>
+          <p class="fs-note" id="linux-note">
+            Linux has no Outlook desktop app, so <strong>Outlook on the web</strong> is
+            the reliable route — the draft is created in your Microsoft 365 mailbox and
+            opened in a new tab. <strong>Default mail client</strong> needs a mail app
+            actually installed (Raspberry Pi OS ships none); without one, InnerCider
+            refuses rather than opening a compose window with the PDF missing.
+          </p>
+        </fieldset>
+
+        <!-- Sits OUTSIDE #fs-graph on purpose: the whole point of the "?" button is
+             reading these instructions BEFORE picking a Graph option, and #fs-graph
+             is hidden until one is selected. Nesting it there would make the button
+             a no-op in the default state. -->
+        <div id="graph-help">
+          <strong>Azure App Registration — one-time setup</strong>
+          <ol>
+            <li>Go to <a href="https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank">portal.azure.com</a> → <strong>App registrations</strong> → <strong>New registration</strong>.<br>
+              Name: anything (e.g. <code>InnerCider</code>)<br>
+              Supported account types: <strong>Accounts in any organizational directory and personal Microsoft accounts</strong><br>
+              Redirect URI: leave blank → click <strong>Register</strong>
+            </li>
+            <li>Copy the <strong>Application (client) ID</strong> from the overview page.</li>
+            <li>Under <strong>API permissions</strong> → <strong>Add a permission</strong> → <strong>Microsoft Graph</strong> → <strong>Delegated</strong> → add <code>Mail.ReadWrite</code>.</li>
+            <li>Paste the Client ID below and click <strong>Sign in</strong>. A browser tab opens — sign in with your Microsoft account. The token is cached so you only do this once.</li>
+          </ol>
         </div>
-        <div id="auth-status" class="inf"></div>
+
+        <fieldset id="fs-graph">
+          <legend>Microsoft Graph sign-in</legend>
+          <div id="graph-setup">
+            <p>This option requires a one-time Microsoft sign-in via the Graph API.
+              <a href="https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank">Register a free Azure app</a>
+              and paste the <strong>Application (client) ID</strong> below.
+            </p>
+            <div id="client-id-row">
+              <input id="client-id" type="text" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" spellcheck="false" />
+              <button id="auth-btn">Sign in</button>
+            </div>
+            <div id="auth-status" class="inf"></div>
+          </div>
+        </fieldset>
       </div>
-    </fieldset>
+    </details>
 
-    <fieldset id="fs-pdf">
-      <legend>PO email PDF</legend>
-      <p class="fs-note">Which Innergy export to attach when you click
-        <strong>Draft Email w/ PDF</strong>:</p>
-      <label class="opt">
-        <input type="radio" name="pdfSource" value="generate" />
-        Generate PDF (standard PO PDF)
-      </label>
-      <label class="opt">
-        <input type="radio" name="pdfSource" value="custom" />
-        Export Custom PDF
-      </label>
-    </fieldset>
+    <!-- ===== PO email ============================================== -->
+    <details class="cat" data-cat="po-email">
+      <summary>PO email</summary>
+      <div class="cat-body">
+        <fieldset id="fs-pdf">
+          <legend>Attached PDF</legend>
+          <p class="fs-note">Which Innergy export to attach when you click
+            <strong>Draft Email w/ PDF</strong>:</p>
+          <label class="opt">
+            <input type="radio" name="pdfSource" value="generate" />
+            Generate PDF (standard PO PDF)
+          </label>
+          <label class="opt">
+            <input type="radio" name="pdfSource" value="custom" />
+            Export Custom PDF
+          </label>
+        </fieldset>
 
-    <fieldset id="fs-bom">
-      <legend>BOM app backlinks <span class="tag">optional</span></legend>
-      <p class="fs-note">
-        If your shop pushes work-order shipment items from a BOM app, enter its
-        address and each pushed item gets a <span class="chip-demo">BOM ↗</span>
-        link back to the BOM it came from.
-        <strong>Leave blank if you don’t use one</strong> — the feature stays off.
-      </p>
-      <input id="bom-base-url" type="url" spellcheck="false"
-             placeholder="https://your-bom-app.example.com" />
-      <div id="bom-base-url-status"></div>
-    </fieldset>
+        <fieldset id="fs-pricing">
+          <legend>Email body</legend>
+          <p class="fs-note">The line-item summary always lists each material with its
+            quantity and project/work order. Pricing is hidden by default.</p>
+          <label class="opt">
+            <input type="checkbox" id="include-pricing" />
+            Include line-item pricing (unit &amp; extended cost)
+          </label>
+        </fieldset>
+      </div>
+    </details>
+
+    <!-- ===== BOM backlinks ========================================= -->
+    <details class="cat" data-cat="bom">
+      <summary>BOM app backlinks <span class="cat-tag">optional</span></summary>
+      <div class="cat-body">
+        <fieldset id="fs-bom">
+          <p class="fs-note">
+            If your shop pushes work-order shipment items from a BOM app, enter its
+            address and each pushed item gets a <span class="chip-demo">BOM ↗</span>
+            link back to the BOM it came from.
+            <strong>Leave blank if you don’t use one</strong> — the feature stays off.
+          </p>
+          <input id="bom-base-url" type="url" spellcheck="false"
+                 placeholder="https://your-bom-app.example.com" />
+          <div id="bom-base-url-status"></div>
+        </fieldset>
+      </div>
+    </details>
+
+    <!-- ===== Time Tracking Tools =================================== -->
+    <details class="cat" data-cat="time-tracking">
+      <summary>Time Tracking Tools <span class="cat-tag">opt-in</span></summary>
+      <div class="cat-body">
+        <fieldset id="fs-timetracking">
+          <p class="fs-note">
+            For timekeepers who <strong>edit and approve time</strong>. When on, selecting
+            two adjacent time segments for the same employee adds in-grid buttons to fill
+            or split the gap between them. Leave off if you don’t manage time entry.
+          </p>
+          <label class="opt">
+            <input type="checkbox" id="tt-enabled" />
+            Enable Time Tracking Tools
+          </label>
+        </fieldset>
+      </div>
+    </details>
 
     <div id="status"></div>
 

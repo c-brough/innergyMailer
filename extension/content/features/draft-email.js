@@ -51,6 +51,20 @@
     pdfSource = PDF_SOURCES[next] ? next : DEFAULT_PDF_SOURCE;
   });
 
+  // ---- Pricing setting -----------------------------------------------------------
+  // Whether to include each line item's extended cost in the email body. Stored
+  // as `includePricing` in chrome.storage.local by the Options page; OFF by
+  // default. Cached so buildSummary can read it synchronously.
+
+  let includePricing = false;
+  chrome.storage.local.get("includePricing", (data) => {
+    includePricing = data.includePricing === true;
+  });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local" || !changes.includePricing) return;
+    includePricing = changes.includePricing.newValue === true;
+  });
+
   // The button to click for this draft: the chosen source, falling back to the
   // other one if Innergy isn't showing it, so the feature still produces a PDF.
   function findSourceBtn() {
@@ -128,53 +142,121 @@
     return "";
   }
 
-  function getMaterialsGrid() {
-    // Locate the "Materials" section heading, climb to its container, find the grid.
-    const nodes = Array.from(document.querySelectorAll("div, span"));
-    const heading = nodes.find(
-      (el) => el.children.length === 0 && /^materials$/i.test(el.textContent.trim())
-    );
-    if (!heading) return null;
-    let container = heading;
-    for (let i = 0; i < 7 && container; i++) container = container.parentElement;
-    return container ? container.querySelector('[role="grid"]') : null;
+  // Materials line items. Primary source is the MAIN-world reader
+  // (materials-read-main.js): it pulls them straight from the DevExtreme grid's
+  // row data, which is robust to Innergy's column/DOM changes and is the only
+  // place the per-line Project and Work Order names exist. If that can't answer
+  // (jQuery/DevExtreme internals changed, grid not ready), fall back to scraping
+  // the rendered grid by its column headers.
+
+  const MATERIALS_TIMEOUT_MS = 1500;
+
+  function requestMaterialsFromMain() {
+    return new Promise((resolve) => {
+      const requestId = "mat_" + Date.now() + "_" + Math.random().toString(36).slice(2);
+      let settled = false;
+      const finish = (val) => {
+        if (settled) return;
+        settled = true;
+        window.removeEventListener("message", onMsg);
+        resolve(val);
+      };
+      function onMsg(ev) {
+        if (ev.source !== window) return;
+        const m = ev.data;
+        if (!m || m.source !== "innercider-main" || m.type !== "MATERIALS_RESULT") return;
+        if (m.requestId !== requestId) return;
+        finish(Array.isArray(m.items) ? m.items : null);
+      }
+      window.addEventListener("message", onMsg);
+      window.postMessage({ source: "innercider", type: "READ_MATERIALS", requestId }, location.origin);
+      setTimeout(() => finish(null), MATERIALS_TIMEOUT_MS);
+    });
   }
 
-  // Cell index map within a Materials data row (observed Innergy layout).
-  const COL = { name: 1, description: 2, uom: 3, qtyOrdered: 4, extendedCost: 7 };
-
-  function getMaterials() {
-    const grid = getMaterialsGrid();
+  // Fallback DOM scrape: map columns by header label -> aria-colindex (robust to
+  // reordering and to the grid being nested more deeply than before), then read
+  // each data row's cells by that index. Project/Work Order aren't rendered as
+  // cells, so they're left empty here — only the MAIN-world reader has them.
+  function scrapeMaterialsFromDom() {
+    const headers = Array.from(document.querySelectorAll('[role="columnheader"]'));
+    const col = {};
+    for (const h of headers) {
+      const label = h.textContent.trim();
+      const ci = h.getAttribute("aria-colindex");
+      if (label && ci && !(label in col)) col[label] = ci;
+    }
+    const nameCi = col["Material Name"];
+    if (!nameCi) return [];
+    const grid = Array.from(document.querySelectorAll('[role="grid"]')).find((g) =>
+      g.querySelector(`[role="gridcell"][aria-colindex="${nameCi}"]`)
+    );
     if (!grid) return [];
-    const rows = Array.from(grid.querySelectorAll('[role="row"]'));
     const items = [];
-    for (const row of rows) {
-      const cells = Array.from(row.querySelectorAll('[role="gridcell"]'));
-      if (cells.length <= COL.extendedCost) continue;
-      const cell = (i) => (cells[i] ? cells[i].textContent.trim() : "");
-      const name = cell(COL.name);
-      if (!name) continue; // skip empty / placeholder rows
+    for (const row of grid.querySelectorAll('[role="row"]')) {
+      const read = (label) => {
+        const ci = col[label];
+        const c = ci && row.querySelector(`[role="gridcell"][aria-colindex="${ci}"]`);
+        return c ? c.textContent.trim() : "";
+      };
+      const name = read("Material Name");
+      if (!name) continue;
       items.push({
         name,
-        description: cell(COL.description),
-        uom: cell(COL.uom),
-        qty: cell(COL.qtyOrdered),
-        extendedCost: cell(COL.extendedCost),
+        uom: read("UoM"),
+        qty: read("Quantity Ordered"),
+        unitCost: read("Expected Unit Cost"),
+        extendedCost: read("Extended Cost"),
+        notes: read("Notes"),
+        projects: [],
+        workOrders: [],
       });
     }
     return items;
   }
 
-  function buildSummary(items) {
+  async function getMaterials() {
+    const fromMain = await requestMaterialsFromMain();
+    if (fromMain && fromMain.length) return fromMain;
+    return scrapeMaterialsFromDom();
+  }
+
+  function buildSummary(items, withPricing) {
     if (!items.length) return "No materials line items found on the PO page.";
     const lines = items.map((it) => {
-      const qty = [it.qty, it.uom].filter(Boolean).join(" ");
-      const cost = it.extendedCost ? ` — ${it.extendedCost}` : "";
-      return `• ${it.name}${qty ? ` (${qty})` : ""}${cost}`;
+      // Quantity (with UoM) always shows; unit + extended price only with pricing on.
+      let inside = [it.qty, it.uom].filter(Boolean).join(" ");
+      if (withPricing) {
+        if (it.unitCost) inside += ` @ ${it.unitCost}`;
+        if (it.extendedCost) inside += ` = ${it.extendedCost}`;
+      }
+      const qtyPart = inside ? ` (${inside})` : "";
+      const projects = (it.projects || []).filter(Boolean);
+      const workOrders = (it.workOrders || []).filter(Boolean);
+      let tags = "";
+      if (projects.length) tags += ` — Project: ${projects.join(", ")}`;
+      if (workOrders.length) tags += ` — WO: ${workOrders.join(", ")}`;
+      let line = `• ${it.name}${qtyPart}${tags}`;
+      const note = IC.htmlToText(it.notes || "");
+      if (note) line += `\n    Note: ${note.replace(/\n/g, "\n    ")}`;
+      return line;
     });
     const count = items.length;
     const header = `${count} material line item${count === 1 ? "" : "s"}:`;
     return `${header}\n${lines.join("\n")}`;
+  }
+
+  // When every line item shares the same project(s) AND the same work order(s),
+  // return "Project - WorkOrder" (dropping whichever is empty) for the subject;
+  // otherwise "" (values are mixed across lines, so nothing is added).
+  function commonLineTag(items) {
+    if (!items.length) return "";
+    const commonOf = (key) => {
+      const sigs = items.map((it) => (it[key] || []).filter(Boolean).slice().sort().join(", "));
+      const first = sigs[0];
+      return first && sigs.every((s) => s === first) ? first : "";
+    };
+    return [commonOf("projects"), commonOf("workOrders")].filter(Boolean).join(" - ");
   }
 
   // Decide which files to attach from the innergyEmailAttach flag:
@@ -281,12 +363,15 @@
     const poNumber = getPoNumber();
     const vendor = getVendorName();
     const to = getVendorContactEmail();
-    const items = getMaterials();
+    const items = await getMaterials();
+    const poNotes = await IC.innergy.fetchPoNotes();
 
-    const subject = `${poNumber} - ${vendor}`;
+    const tag = commonLineTag(items);
+    const subject = tag ? `${poNumber} - ${vendor} - ${tag}` : `${poNumber} - ${vendor}`;
     const body =
       `${poNumber}\nVendor: ${vendor}\n\n` +
-      `${buildSummary(items)}\n`;
+      `${buildSummary(items, includePricing)}\n` +
+      (poNotes ? `\nPO Notes:\n${poNotes}\n` : "");
 
     if (!to) {
       IC.warn("No vendor contact email found; drafting without a recipient.");

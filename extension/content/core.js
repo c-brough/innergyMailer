@@ -96,6 +96,36 @@
     }
   }
 
+  // Innergy stores notes as HTML. Email bodies are plain text, so convert:
+  // turn block/break tags into newlines, then take textContent. Parsed via
+  // DOMParser (never inserted into the page), so nothing in the note executes.
+  function htmlToText(html) {
+    if (!html) return "";
+    const withBreaks = String(html)
+      .replace(/<\s*br\s*\/?>/gi, "\n")
+      .replace(/<\/\s*(p|div|li|tr|h[1-6])\s*>/gi, "\n");
+    let text = "";
+    try {
+      text = new DOMParser().parseFromString(withBreaks, "text/html").body.textContent || "";
+    } catch (e) {
+      text = withBreaks.replace(/<[^>]*>/g, "");
+    }
+    return text
+      .replace(/ /g, " ")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+
+  // The PO's vendor-facing notes (the ones meant for the supplier), as plain
+  // text. Not the internal receivingNotes. "" when absent or unavailable.
+  async function fetchPoNotes() {
+    const poId = getPoId();
+    if (!poId) return "";
+    const data = await runQuery({ PurchaseOrderId: poId, $type: "PurchaseOrderDetailsQuery" });
+    return data ? htmlToText(data.vendorNotes || "") : "";
+  }
+
   // ---- Feature registry -------------------------------------------------------
   // Each feature file calls InnerCider.registerFeature({ id, mount }). `mount()`
   // must be cheap and idempotent — it runs on every SPA navigation/DOM mutation
@@ -107,9 +137,11 @@
   window.InnerCider = {
     log,
     warn,
+    htmlToText,
     innergy: {
       getPoId,
       fetchPoFiles,
+      fetchPoNotes,
     },
     registerFeature,
     _features: features,
