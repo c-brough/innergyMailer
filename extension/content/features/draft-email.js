@@ -65,6 +65,15 @@
     includePricing = changes.includePricing.newValue === true;
   });
 
+  // ---- Mail-app setting (cached) --------------------------------------------------
+  // Only the "outlook_web_modal" value changes behavior here: it pops a compose
+  // modal and sends via Graph. Every other value keeps the hand-off-to-host flow.
+  let mailApp = "";
+  chrome.storage.local.get("mailApp", (data) => { mailApp = data.mailApp || ""; });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && changes.mailApp) mailApp = changes.mailApp.newValue || "";
+  });
+
   // The button to click for this draft: the chosen source, falling back to the
   // other one if Innergy isn't showing it, so the feature still produces a PDF.
   function findSourceBtn() {
@@ -397,6 +406,22 @@
       { include: include.map((f) => f.name), undecided: undecided.map((f) => f.name) }
     );
 
+    // Compose-and-send option: open a compose modal (To/Subject/Body editable,
+    // PO PDF attached automatically) and send via Graph on click. The Send click
+    // is the user gesture the export download needs.
+    if (mailApp === "outlook_web_modal") {
+      openComposeModal(draftContext, undecided, {
+        onSend: (edited, checked) => {
+          draftContext.subject = edited.subject;
+          draftContext.body = edited.body;
+          draftContext.recipients = edited.recipients;
+          startDraft(draftContext, include.concat(checked));
+        },
+        onCancel: resetButton,
+      });
+      return;
+    }
+
     if (undecided.length === 0) {
       // Nothing to ask — proceed. (Still within the user gesture window.)
       startDraft(draftContext, include);
@@ -569,6 +594,121 @@
     document.body.appendChild(overlay);
   }
 
+  // ---- Compose modal (Outlook on the web — compose & send here) ----------------
+  // When a result arrives for an open compose modal it's routed here instead of
+  // the corner banner, so the modal can show "Sending…/Sent" and clear itself.
+  let composeOnResult = null;
+
+  function openComposeModal(ctx, undecidedFiles, { onSend, onCancel }) {
+    document.getElementById("innercider-compose")?.remove();
+    const overlay = document.createElement("div");
+    overlay.id = "innercider-compose";
+    Object.assign(overlay.style, {
+      position: "fixed", inset: "0", background: "rgba(0,0,0,.45)", zIndex: "2147483647",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      font: "14px -apple-system, system-ui, sans-serif",
+    });
+    const card = document.createElement("div");
+    Object.assign(card.style, {
+      background: "#fff", color: "#1a1a1a", borderRadius: "10px", padding: "18px 20px",
+      width: "600px", maxWidth: "94vw", maxHeight: "88vh", overflowY: "auto", boxShadow: "0 8px 30px rgba(0,0,0,.3)",
+    });
+
+    const h = document.createElement("div");
+    h.textContent = "New email — Outlook on the web";
+    Object.assign(h.style, { fontWeight: "700", fontSize: "16px", marginBottom: "12px" });
+
+    const mkField = (labelText, el) => {
+      const wrap = document.createElement("div");
+      wrap.style.marginBottom = "10px";
+      const lab = document.createElement("div");
+      lab.textContent = labelText;
+      Object.assign(lab.style, { fontSize: "12px", fontWeight: "600", color: "#555", marginBottom: "4px" });
+      wrap.append(lab, el);
+      return wrap;
+    };
+    const inputStyle = {
+      width: "100%", boxSizing: "border-box", padding: "7px 9px", border: "1px solid #ccc",
+      borderRadius: "6px", font: "13px -apple-system, system-ui, sans-serif",
+    };
+    const toIn = document.createElement("input");
+    toIn.type = "text"; toIn.value = (ctx.recipients || []).join(", ");
+    toIn.placeholder = "recipient@example.com"; Object.assign(toIn.style, inputStyle);
+    const subjIn = document.createElement("input");
+    subjIn.type = "text"; subjIn.value = ctx.subject || ""; Object.assign(subjIn.style, inputStyle);
+    const bodyIn = document.createElement("textarea");
+    bodyIn.value = ctx.body || ""; bodyIn.rows = 11;
+    Object.assign(bodyIn.style, inputStyle, { resize: "vertical", fontFamily: "ui-monospace, monospace", fontSize: "12.5px", lineHeight: "1.45" });
+
+    const att = document.createElement("div");
+    Object.assign(att.style, { margin: "4px 0 2px", fontSize: "12.5px", color: "#3a5a44" });
+    att.textContent = "📎 The PO PDF attaches automatically.";
+    const checks = [];
+    if (undecidedFiles && undecidedFiles.length) {
+      const sub = document.createElement("div");
+      sub.textContent = "Also attach:"; Object.assign(sub.style, { fontSize: "12px", fontWeight: "600", color: "#555", margin: "8px 0 2px" });
+      att.appendChild(sub);
+      for (const f of undecidedFiles) {
+        const row = document.createElement("label");
+        Object.assign(row.style, { display: "flex", alignItems: "center", gap: "8px", padding: "3px 0", cursor: "pointer", color: "#333" });
+        const cb = document.createElement("input"); cb.type = "checkbox"; Object.assign(cb.style, { width: "15px", height: "15px" });
+        const span = document.createElement("span"); span.textContent = f.name;
+        row.append(cb, span); att.appendChild(row);
+        checks.push({ cb, file: f });
+      }
+    }
+
+    const status = document.createElement("div");
+    Object.assign(status.style, { minHeight: "16px", fontSize: "12.5px", margin: "10px 0 0" });
+
+    const btns = document.createElement("div");
+    Object.assign(btns.style, { display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "14px" });
+    const discard = document.createElement("button"); discard.type = "button"; discard.textContent = "Discard";
+    Object.assign(discard.style, { padding: "8px 14px", borderRadius: "6px", border: "1px solid #ccc", background: "#f3f3f3", cursor: "pointer", fontWeight: "600" });
+    const send = document.createElement("button"); send.type = "button"; send.textContent = "Send";
+    Object.assign(send.style, { padding: "8px 16px", borderRadius: "6px", border: "none", background: "#2f6feb", color: "#fff", cursor: "pointer", fontWeight: "700" });
+
+    let closed = false;
+    const close = () => { if (closed) return; closed = true; composeOnResult = null; overlay.remove(); document.removeEventListener("keydown", onKey, true); };
+    const cancel = () => { close(); if (onCancel) onCancel(); };
+    function onKey(e) { if (e.key === "Escape") cancel(); }
+
+    discard.addEventListener("click", cancel);
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) cancel(); });
+    document.addEventListener("keydown", onKey, true);
+
+    send.addEventListener("click", () => {
+      const recipients = toIn.value.split(/[,;]/).map((s) => s.trim()).filter(Boolean);
+      if (!recipients.length) {
+        status.textContent = "Add at least one recipient."; status.style.color = "#c62828";
+        return;
+      }
+      send.disabled = true; send.style.opacity = "0.6"; send.textContent = "Sending…";
+      discard.disabled = true;
+      status.textContent = "Sending via Outlook on the web…"; status.style.color = "#555";
+      // Route the eventual MAIL_RESULT to this modal.
+      composeOnResult = (ok, message) => {
+        if (ok) {
+          status.textContent = "✓ " + (message || "Sent."); status.style.color = "#2e7d32";
+          send.textContent = "Sent"; composeOnResult = null;
+          setTimeout(close, 1200);
+        } else {
+          status.textContent = "✗ " + (message || "Send failed."); status.style.color = "#c62828";
+          send.disabled = false; send.style.opacity = "1"; send.textContent = "Send";
+          discard.disabled = false; composeOnResult = null;
+        }
+      };
+      const checked = checks.filter((c) => c.cb.checked).map((c) => c.file);
+      onSend({ recipients, subject: subjIn.value, body: bodyIn.value }, checked);
+    });
+
+    card.append(h, mkField("To", toIn), mkField("Subject", subjIn), mkField("Body", bodyIn), att, status, btns);
+    btns.append(discard, send);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    toIn.focus();
+  }
+
   // ---- Outcome banner -----------------------------------------------------------
 
   function showBanner(ok, message) {
@@ -594,7 +734,10 @@
   }
 
   chrome.runtime.onMessage.addListener((msg) => {
-    if (msg && msg.type === "MAIL_RESULT") showBanner(msg.ok, msg.message);
+    if (msg && msg.type === "MAIL_RESULT") {
+      if (composeOnResult) composeOnResult(msg.ok, msg.message);
+      else showBanner(msg.ok, msg.message);
+    }
     if (msg && msg.type === "DEBUG") console.log("[InnerCider][bg]", msg.text, msg.data || "");
   });
 

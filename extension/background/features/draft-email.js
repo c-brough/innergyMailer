@@ -26,8 +26,73 @@
 import { dbg, getDebugTab, setDebugTab } from "../shared/log.js";
 import { setPending, getPending, clearPending } from "../shared/session.js";
 import { sendNative } from "../shared/native.js";
+import { sendPoEmail } from "./graph-send.js";
 
 const ARM_TIMEOUT_MS = 120_000; // ignore stale arms older than this
+
+// Resolve the configured mail app, treating a value from another OS as unset.
+// `outlook_web_modal` (the in-page compose + Graph send) is valid on every OS.
+async function resolveMailApp() {
+  const stored = await chrome.storage.local.get("mailApp");
+  const ua = navigator.userAgent;
+  const isWindows = ua.includes("Windows");
+  const isLinux = !isWindows && /Linux|X11/.test(ua) && !/Android|CrOS/.test(ua);
+  const os = isWindows ? "win" : isLinux ? "linux" : "mac";
+  const defaultApp = { win: "outlook_classic", linux: "outlook_web", mac: "mail" }[os];
+  const OS_APPS = {
+    win: ["outlook_classic", "outlook_new", "outlook_web_modal"],
+    linux: ["outlook_web", "linux_mail", "outlook_web_modal"],
+    mac: ["mail", "outlook", "outlook_web_modal"],
+  };
+  return OS_APPS[os].includes(stored.mailApp) ? stored.mailApp : defaultApp;
+}
+
+// Fetch a URL and return it as a Graph fileAttachment { name, bytesBase64,
+// contentType }. SAS-signed Azure blob URLs (the exported PDF) are public GETs;
+// PO files on app.innergy.com need the session cookie (withCreds).
+async function fetchAttachment(url, name, withCreds) {
+  const r = await fetch(url, withCreds ? { credentials: "include" } : {});
+  if (!r.ok) throw new Error("fetch " + r.status);
+  const buf = await r.arrayBuffer();
+  // Graph inline attachments must share one <4 MB message; guard per file.
+  if (buf.byteLength > 3 * 1024 * 1024) throw new Error("file too large to send inline (>3 MB)");
+  const bytes = new Uint8Array(buf);
+  let bin = "";
+  const CH = 0x8000;
+  for (let i = 0; i < bytes.length; i += CH) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+  let fname = name;
+  if (!fname) {
+    try { fname = decodeURIComponent(new URL(url).pathname.split("/").pop()) || "attachment.pdf"; } catch { fname = "attachment.pdf"; }
+  }
+  const ct = (r.headers.get("content-type") || "application/octet-stream").split(";")[0];
+  return { name: fname, bytesBase64: btoa(bin), contentType: ct };
+}
+
+// Fetch the PDF (and any PO files) and send the email through Graph, then report
+// the outcome to the compose modal via MAIL_RESULT.
+async function deliverViaGraph(pdfUrl, pending) {
+  try {
+    const { azureClientId } = await chrome.storage.local.get("azureClientId");
+    const atts = [await fetchAttachment(pdfUrl, null, false)];
+    for (const f of pending.files || []) {
+      try { atts.push(await fetchAttachment(f.url, f.name, true)); }
+      catch (e) { dbg("PO file skipped", { name: f.name, error: String(e) }); }
+    }
+    const r = await sendPoEmail({
+      clientId: azureClientId, subject: pending.subject, body: pending.body,
+      recipients: pending.recipients, attachments: atts,
+    });
+    if (r.ok) {
+      const extra = atts.length - 1;
+      const suffix = extra > 0 ? ` (+${extra} PO file${extra === 1 ? "" : "s"})` : "";
+      report(pending.tabId, true, `Email sent via Outlook on the web${suffix}.`);
+    } else {
+      report(pending.tabId, false, `Send failed: ${r.error}`);
+    }
+  } catch (e) {
+    report(pending.tabId, false, `Send failed: ${e.message || e}`);
+  }
+}
 
 // Fallback-path matching only (the EXPORT_PDF_URL path knows exactly which file
 // it fetched). A download event carries no link back to the click that caused
@@ -49,15 +114,19 @@ function filenameContainsDocNumber(docNumber, path) {
 
 // chrome.runtime.onMessage handler for EXPORT_AND_MAIL, arms the download watch.
 export function handleExportAndMail(msg, sender, sendResponse) {
-  setPending({
-    subject: msg.subject,
-    body: msg.body,
-    recipients: Array.isArray(msg.recipients) ? msg.recipients : [],
-    docNumber: msg.docNumber || "",
-    files: Array.isArray(msg.files) ? msg.files : [],
-    tabId: sender.tab ? sender.tab.id : null,
-    ts: Date.now(),
-  })
+  resolveMailApp()
+    .then((mailApp) =>
+      setPending({
+        subject: msg.subject,
+        body: msg.body,
+        recipients: Array.isArray(msg.recipients) ? msg.recipients : [],
+        docNumber: msg.docNumber || "",
+        files: Array.isArray(msg.files) ? msg.files : [],
+        tabId: sender.tab ? sender.tab.id : null,
+        mailApp,
+        ts: Date.now(),
+      })
+    )
     .then(() => {
       dbg("armed for", msg.docNumber);
       sendResponse({ armed: true });
@@ -111,6 +180,14 @@ export async function handleCompletedDownload(downloadId) {
     path
   );
 
+  // The compose-and-send path needs the PDF's URL (to fetch bytes), which this
+  // download-only fallback doesn't have. It almost never fires for this path
+  // (the window.open capture runs first); if it does, ask the user to retry.
+  if (pending.mailApp === "outlook_web_modal") {
+    report(pending.tabId, false, "Couldn't capture the PDF to send. Try again.");
+    return;
+  }
+
   await deliver(path, pending);
 }
 
@@ -147,6 +224,12 @@ export async function handleExportPdfUrl(msg, sender, sendResponse) {
   await clearPending();
   dbg("matched PDF (captured from window.open)", msg.url);
   sendResponse({ ok: true });
+
+  // Compose-and-send path: fetch the bytes and send via Graph, no disk, no host.
+  if (pending.mailApp === "outlook_web_modal") {
+    await deliverViaGraph(msg.url, pending);
+    return;
+  }
 
   try {
     // No filename: Chrome derives it from the URL path, which already carries

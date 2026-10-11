@@ -3,6 +3,15 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.9.0] - 2026-10-11
+### Added
+- **Outlook on the web — compose & send here.** A new global mail-app option
+  (any OS): clicking "Draft Email w/ PDF" opens a compose window inside Innergy
+  (To / Subject / Body, editable, PO PDF attached). Click Send and it sends
+  through your Microsoft 365 account via Graph, then the window clears; Discard
+  or close to go back. Needs a one-time Azure setup (a redirect URI + the
+  Mail.Send permission) shown in Options.
+
 ## [1.8.0] - 2026-10-11
 ### Added
 - **In-app updates.** The Options page now checks GitHub for a newer version,

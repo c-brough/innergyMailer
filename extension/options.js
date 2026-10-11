@@ -28,7 +28,7 @@ Object.entries(OS_OPTION_IDS).forEach(([os, ids]) => {
 // Microsoft Graph API, so both need the Azure Client ID + device-code sign-in.
 // "outlook_new" is kept as-is rather than renamed: existing Windows installs
 // already have that value saved in chrome.storage.local.
-const GRAPH_APPS = ["outlook_new", "outlook_web"];
+const GRAPH_APPS = ["outlook_new", "outlook_web", "outlook_web_modal"];
 
 // Show/hide the Graph API setup panel based on selected app.
 const graphFieldset = document.getElementById("fs-graph");
@@ -231,6 +231,27 @@ function setAuthStatus(cls, msg) {
   el.className = cls;
   el.textContent = msg;
 }
+
+// ---- Outlook-on-the-web (modal) help + redirect URI --------------------------
+// The in-page compose option authenticates via chrome.identity, which needs the
+// extension's chromiumapp.org redirect URI registered on the Azure app. Show it
+// so the user can copy it, and toggle the setup instructions.
+(() => {
+  const help = document.getElementById("owa-modal-help");
+  document.querySelectorAll(".owa-modal-help-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      help.style.display = help.style.display === "block" ? "none" : "block";
+    });
+  });
+  try {
+    const uri = chrome.identity.getRedirectURL();
+    const el = document.getElementById("owa-redirect-uri");
+    if (el) el.textContent = uri;
+  } catch (e) {
+    /* identity unavailable — leave placeholder */
+  }
+})();
 
 function showSaved() {
   const el = document.getElementById("status");

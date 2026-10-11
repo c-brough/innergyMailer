@@ -73,6 +73,15 @@
       #graph-help code { background: #f0f0f0; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
       #graph-help a { color: #1a56db; }
 
+      #owa-modal-help {
+        display: none; margin-top: 10px; padding: 12px 14px;
+        background: #f5f7ff; border: 1px solid #c7d0f8; border-radius: 8px;
+        font-size: 13px; line-height: 1.55; color: #333;
+      }
+      #owa-modal-help ol { margin: 8px 0 0 18px; padding: 0; }
+      #owa-modal-help li { margin-bottom: 6px; }
+      #owa-modal-help code { background: #f0f0f0; padding: 1px 4px; border-radius: 3px; font-size: 12px; word-break: break-all; }
+
       /* Only shown while a Graph-backed mail app is selected; options.js toggles it. */
       #fs-graph { display: none; }
       #graph-setup { margin-top: 8px; padding: 12px 14px; background: #f5f7ff; border: 1px solid #c7d0f8; border-radius: 8px; }
@@ -242,6 +251,33 @@
             actually installed (Raspberry Pi OS ships none); without one, InnerCider
             refuses rather than opening a compose window with the PDF missing.
           </p>
+        </fieldset>
+
+        <fieldset id="fs-allos">
+          <legend>All platforms</legend>
+          <label class="opt" id="opt-owa-modal">
+            <input type="radio" name="mailApp" value="outlook_web_modal" />
+            Outlook on the web — compose &amp; send here
+            <button type="button" class="help-btn owa-modal-help-btn" title="Azure setup instructions">?</button>
+          </label>
+          <p class="fs-note">
+            Pops a compose window inside Innergy and sends through your Microsoft 365
+            account (Graph) when you click Send — the PO PDF is attached. Works on any
+            OS; no desktop mail app needed.
+          </p>
+          <div id="owa-modal-help">
+            <strong>One-time Azure setup</strong> (uses the same Client ID as the Graph sign-in above):
+            <ol>
+              <li>In your Azure app → <strong>Authentication</strong> → <strong>Add a platform</strong> →
+                <strong>Mobile and desktop applications</strong> → add this redirect URI:
+                <br /><code id="owa-redirect-uri">loading…</code></li>
+              <li>Under <strong>API permissions</strong> → <strong>Microsoft Graph</strong> →
+                <strong>Delegated</strong> → add <code>Mail.Send</code>.</li>
+              <li>Paste the <strong>Client ID</strong> in the Microsoft Graph sign-in box below. The
+                first time you click <strong>Send</strong>, a Microsoft sign-in window appears; after
+                that it's remembered.</li>
+            </ol>
+          </div>
         </fieldset>
 
         <!-- Sits OUTSIDE #fs-graph on purpose: the whole point of the "?" button is
