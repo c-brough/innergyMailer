@@ -3,6 +3,11 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.15.3] - 2026-10-19
+### Changed
+- Notifications button: also hides Innergy's green unread-count badge on its bell
+  (by hiding the whole `.notification-wrapper`), not just the bell icon.
+
 ## [1.15.2] - 2026-10-19
 ### Changed
 - Notifications button: hides Innergy's own header bell while ours is shown

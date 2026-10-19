@@ -282,7 +282,8 @@
   }
   let hiddenBell = null;
   function hideOriginalBell(icon) {
-    const target = icon.closest("a,button") || icon;
+    // The .notification-wrapper holds the bell AND its green count badge.
+    const target = icon.closest(".notification-wrapper") || icon.closest("a,button") || icon;
     if (hiddenBell && hiddenBell !== target) restoreBell();
     target.style.visibility = "hidden"; // keep its space so our button stays aligned
     hiddenBell = target;
