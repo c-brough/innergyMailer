@@ -25,6 +25,7 @@
         "content/features/bom-backlinks.js",
         "content/features/time-tracking.js",
         "content/features/notes-enhancements.js",
+        "content/features/note-drafts.js",
         "content/features/notifications-sidebar.js",
         "content/bootstrap.js"
       ],

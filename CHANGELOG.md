@@ -4,6 +4,15 @@ All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
 ## [1.16.0] - 2026-10-19
+### Added
+- **Note draft autosave** (on by default; opt out in Options). While you compose
+  a note — a new post or a reply — it quietly snapshots the rich-text field on
+  every **carriage return** and at least every **5 minutes**, keeping the **last
+  3 drafts per notes page**. If a draft isn't already in an open editor, a
+  dismissible blue banner appears at the bottom of the notes page; click it for a
+  ~75%-width card to view, **copy** (formatting preserved), or **delete** each
+  draft. Options lists **every** saved draft across all pages (copy/delete there
+  too). Nothing is sent anywhere — drafts live only in your browser.
 ### Changed
 - Notifications sidebar: clicking a notification's body, its context chip, or
   **Preview** now marks that notification read (a real update to Innergy), so

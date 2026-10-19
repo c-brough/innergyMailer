@@ -479,6 +479,35 @@
       </div>
     </details>
 
+    <!-- ===== Note drafts ========================================= -->
+    <details class="cat" data-cat="note-drafts">
+      <summary>Note draft autosave <span class="cat-tag">on by default</span></summary>
+      <div class="cat-body">
+        <fieldset id="fs-note-drafts">
+          <p class="fs-note">
+            While you compose a note (a new post or a reply), quietly saves snapshots of
+            the rich-text field — on every <strong>carriage return</strong> and at least
+            every <strong>5 minutes</strong> — so you can recover them if the field is lost.
+            Keeps the <strong>last 3 drafts per notes page</strong>. On a notes page a
+            dismissible blue banner offers to view, copy, or delete them. On by default —
+            turn off to opt out.
+          </p>
+          <label class="opt">
+            <input type="checkbox" id="note-drafts-enabled" />
+            Enable note draft autosave
+          </label>
+
+          <div style="margin-top:14px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+              <div style="font-size:12px;font-weight:600;color:#444;flex:1">All saved drafts</div>
+              <button type="button" id="nd-clear-all" class="btn-link" style="font-size:12px">Clear all</button>
+            </div>
+            <div id="nd-list"></div>
+          </div>
+        </fieldset>
+      </div>
+    </details>
+
     <!-- ===== Notifications sidebar ================================ -->
     <details class="cat" data-cat="notifications">
       <summary>Notifications sidebar <span class="cat-tag">opt-in</span></summary>

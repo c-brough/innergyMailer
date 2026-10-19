@@ -329,6 +329,117 @@ notesBox.addEventListener("change", (e) => {
   showSaved();
 });
 
+// ---- Note draft autosave (opt-out; ON by default) ---------------------------
+// content/features/note-drafts.js reads `noteDraftsEnabled` and stores drafts in
+// `noteDrafts` ({ [baseNotesUrlKey]: [{ts,text,html,url,title}, …] }).
+const ndBox = document.getElementById("note-drafts-enabled");
+chrome.storage.local.get("noteDraftsEnabled", (data) => {
+  ndBox.checked = data.noteDraftsEnabled !== false; // default on
+});
+ndBox.addEventListener("change", (e) => {
+  chrome.storage.local.set({ noteDraftsEnabled: e.target.checked });
+  showSaved();
+});
+
+const ndList = document.getElementById("nd-list");
+const ndClearAll = document.getElementById("nd-clear-all");
+
+function ndRelTime(ts) {
+  const s = Math.round((Date.now() - ts) / 1000);
+  if (s < 60) return "just now";
+  const m = Math.round(s / 60);
+  if (m < 60) return m + (m === 1 ? " min ago" : " mins ago");
+  const h = Math.round(m / 60);
+  if (h < 24) return h + (h === 1 ? " hour ago" : " hours ago");
+  return new Date(ts).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function ndCopy(draft, btn) {
+  const done = () => { const o = btn.textContent; btn.textContent = "Copied!"; setTimeout(() => (btn.textContent = o), 1400); };
+  try {
+    if (draft.html && window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+      const item = new ClipboardItem({
+        "text/html": new Blob([draft.html], { type: "text/html" }),
+        "text/plain": new Blob([draft.text || ""], { type: "text/plain" }),
+      });
+      navigator.clipboard.write([item]).then(done, () => navigator.clipboard.writeText(draft.text || "").then(done, () => {}));
+      return;
+    }
+  } catch (e) { /* fall through */ }
+  navigator.clipboard.writeText(draft.text || "").then(done, () => {});
+}
+
+function renderDrafts() {
+  chrome.storage.local.get("noteDrafts", (d) => {
+    const store = (d && d.noteDrafts) || {};
+    const keys = Object.keys(store).filter((k) => Array.isArray(store[k]) && store[k].length);
+    ndList.innerHTML = "";
+    ndClearAll.style.display = keys.length ? "" : "none";
+    if (!keys.length) {
+      const e = document.createElement("div");
+      e.style.cssText = "font-size:12px;color:#777;padding:6px 0";
+      e.textContent = "No saved drafts yet.";
+      ndList.appendChild(e);
+      return;
+    }
+    // Most-recently-updated page first.
+    keys.sort((a, b) => (store[b][0].ts || 0) - (store[a][0].ts || 0));
+    for (const key of keys) {
+      const group = document.createElement("div");
+      group.style.cssText = "border:1px solid #e2e5ea;border-radius:9px;margin-bottom:12px;overflow:hidden";
+      const head = document.createElement("div");
+      head.style.cssText = "display:flex;align-items:center;gap:8px;padding:8px 11px;background:#f6f7f9;border-bottom:1px solid #edeff2";
+      const title = document.createElement("a");
+      title.textContent = store[key][0].title || key;
+      title.href = store[key][0].url || "#";
+      title.target = "_blank";
+      title.style.cssText = "flex:1;font-size:12.5px;font-weight:600;color:#1a56db;text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
+      head.appendChild(title);
+      group.appendChild(head);
+
+      store[key].forEach((draft, i) => {
+        const row = document.createElement("div");
+        row.style.cssText = "padding:8px 11px;border-top:" + (i ? "1px solid #f0f1f4" : "none");
+        const bar = document.createElement("div");
+        bar.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:5px";
+        const when = document.createElement("div");
+        when.style.cssText = "flex:1;font-size:11.5px;color:#667;font-weight:600";
+        when.textContent = "Saved " + ndRelTime(draft.ts);
+        const copy = document.createElement("button");
+        copy.type = "button"; copy.textContent = "Copy";
+        copy.style.cssText = "cursor:pointer;border:1px solid #cbd2db;background:#fff;border-radius:6px;padding:2px 9px;font-size:11.5px;font-weight:600;color:#334155";
+        copy.addEventListener("click", () => ndCopy(draft, copy));
+        const del = document.createElement("button");
+        del.type = "button"; del.textContent = "Delete";
+        del.style.cssText = "cursor:pointer;border:1px solid #fbd0d0;background:#fff;border-radius:6px;padding:2px 9px;font-size:11.5px;font-weight:600;color:#b91c1c";
+        del.addEventListener("click", () => {
+          chrome.storage.local.get("noteDrafts", (dd) => {
+            const s = (dd && dd.noteDrafts) || {};
+            const a = Array.isArray(s[key]) ? s[key] : [];
+            a.splice(i, 1);
+            if (a.length) s[key] = a; else delete s[key];
+            chrome.storage.local.set({ noteDrafts: s }, renderDrafts);
+          });
+        });
+        bar.appendChild(when); bar.appendChild(copy); bar.appendChild(del);
+        const prev = document.createElement("div");
+        prev.style.cssText = "white-space:pre-wrap;word-break:break-word;font-size:12px;color:#222;max-height:120px;overflow:auto;background:#fff;border:1px solid #eef0f3;border-radius:6px;padding:7px 9px";
+        prev.textContent = draft.text || "";
+        row.appendChild(bar); row.appendChild(prev);
+        group.appendChild(row);
+      });
+      ndList.appendChild(group);
+    }
+  });
+}
+
+ndClearAll.addEventListener("click", () => {
+  if (!confirm("Delete all saved note drafts?")) return;
+  chrome.storage.local.set({ noteDrafts: {} }, renderDrafts);
+});
+chrome.storage.onChanged.addListener((c, area) => { if (area === "local" && c.noteDrafts) renderDrafts(); });
+renderDrafts();
+
 // ---- Notifications sidebar (opt-in) + default filters ------------------------
 // content/features/notifications-sidebar.js reads notifSidebarEnabled,
 // notifDefaultStatus and notifTypes ({notes,tasks,reports,other}).
@@ -613,12 +724,13 @@ notifTypeBoxes.forEach((cb) => cb.addEventListener("change", saveNotifTypes));
       case "bom": return !!(data.bomBaseUrl && data.bomBaseUrl.trim());
       case "time-tracking": return data.timeTrackingEnabled === true;
       case "notes": return data.notesEnhancementsEnabled !== false; // on by default
+      case "note-drafts": return data.noteDraftsEnabled !== false;  // on by default
       case "notifications": return data.notifSidebarEnabled === true;
       default: return false;                     // Updates: neutral
     }
   }
   function refresh() {
-    chrome.storage.local.get(["mailApp", "poEmailEnabled", "bomBaseUrl", "timeTrackingEnabled", "notesEnhancementsEnabled", "notifSidebarEnabled"], (data) => {
+    chrome.storage.local.get(["mailApp", "poEmailEnabled", "bomBaseUrl", "timeTrackingEnabled", "notesEnhancementsEnabled", "noteDraftsEnabled", "notifSidebarEnabled"], (data) => {
       cats.forEach((c) => c.classList.toggle("cat--on", isOn(c, data)));
       // Mail app gating.
       if (mailCat) {
@@ -631,7 +743,7 @@ notifTypeBoxes.forEach((cb) => cb.addEventListener("change", saveNotifTypes));
   }
   refresh();
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && (changes.mailApp || changes.poEmailEnabled || changes.bomBaseUrl || changes.timeTrackingEnabled || changes.notesEnhancementsEnabled || changes.notifSidebarEnabled)) refresh();
+    if (area === "local" && (changes.mailApp || changes.poEmailEnabled || changes.bomBaseUrl || changes.timeTrackingEnabled || changes.notesEnhancementsEnabled || changes.noteDraftsEnabled || changes.notifSidebarEnabled)) refresh();
   });
 
   // Expand / collapse all (only categories currently shown; never expand a
