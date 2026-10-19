@@ -3,6 +3,21 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.16.1] - 2026-10-19
+### Fixed
+- Note draft autosave was re-reading storage and measuring layout on **every**
+  DOM change (which happens on each keystroke), which could hang or crash a busy
+  notes page ("Aw, Snap!"). It now caches drafts in memory, reads storage only on
+  change, and debounces all re-evaluation. (For the record, this feature makes
+  **no** network requests — it never contacts Innergy's servers.)
+### Changed
+- Note drafts now surface as a small blue **draft icon** at the bottom of a notes
+  page; **hover** expands it into the banner, and its **×** collapses it back to
+  the icon (rather than a persistent banner). The whole icon/banner (outside ×)
+  opens the drafts view.
+- The drafts card now shows the **latest draft prominently** and keeps earlier
+  drafts **collapsed** — click one to unroll it.
+
 ## [1.16.0] - 2026-10-19
 ### Added
 - **Note draft autosave** (on by default; opt out in Options). While you compose
