@@ -3,6 +3,12 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.14.1] - 2026-10-18
+### Changed
+- Notifications sidebar: clicking outside the panel now closes it; the unread
+  count refreshes more often (and on open/close); and the 🔔 button pulses an
+  orange shadow while you have unread notifications.
+
 ## [1.14.0] - 2026-10-18
 ### Added
 - **Notifications sidebar** (opt-in). A floating 🔔 button opens a right-docked

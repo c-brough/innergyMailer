@@ -121,6 +121,8 @@
     s.id = "ic-notif-style";
     s.textContent = `
 #ic-notif-toggle{position:fixed;right:18px;bottom:18px;z-index:2147483600;width:46px;height:46px;border-radius:50%;background:#1a56db;color:#fff;border:none;cursor:pointer;box-shadow:0 3px 12px rgba(0,0,0,.3);font-size:20px;display:flex;align-items:center;justify-content:center}
+@keyframes icnBellPulse{0%{box-shadow:0 3px 12px rgba(0,0,0,.3),0 0 0 0 rgba(245,124,0,.65)}50%{box-shadow:0 3px 12px rgba(0,0,0,.3),0 0 0 6px rgba(245,124,0,.28)}100%{box-shadow:0 3px 12px rgba(0,0,0,.3),0 0 0 0 rgba(245,124,0,0)}}
+#ic-notif-toggle.has-unread{animation:icnBellPulse 1.5s ease-in-out infinite}
 #ic-notif-badge{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:#e23b3b;color:#fff;font:700 11px -apple-system,system-ui,sans-serif;display:none;align-items:center;justify-content:center;box-sizing:border-box}
 #ic-notif-badge.show{display:flex}
 #ic-notif-panel{position:fixed;top:0;right:0;height:100vh;width:380px;max-width:94vw;background:#fff;color:#1a1a1a;z-index:2147483601;box-shadow:-4px 0 24px rgba(0,0,0,.22);transform:translateX(100%);transition:transform .22s ease;display:flex;flex-direction:column;font:13px -apple-system,system-ui,sans-serif}
@@ -216,6 +218,7 @@
     el.seg.addEventListener("click", (e) => { const s = e.target.getAttribute("data-s"); if (s) { state.status = s; paintSeg(); load(true); } });
     el.search.addEventListener("input", () => { state.search = el.search.value.trim().toLowerCase(); render(); });
     el.filterPop.addEventListener("change", (e) => { const t = e.target.getAttribute("data-t"); if (t) { state.types[t] = e.target.checked; render(); } });
+    document.addEventListener("mousedown", onDocDown, true);
   }
 
   function paintSeg() {
@@ -223,6 +226,14 @@
   }
   function paintFilters() {
     el.filterPop.querySelectorAll("input[data-t]").forEach((cb) => (cb.checked = state.types[cb.getAttribute("data-t")] !== false));
+  }
+
+  // Close the panel when clicking anywhere outside it (but not the toggle or the
+  // note popup).
+  function onDocDown(e) {
+    if (!state.open || !el) return;
+    if (el.panel.contains(e.target) || el.toggle.contains(e.target) || el.pop.contains(e.target)) return;
+    togglePanel(false);
   }
 
   async function togglePanel(force) {
@@ -235,7 +246,10 @@
       state.types = Object.assign({}, settings.types);
       state.search = ""; el.search.value = "";
       paintSeg(); paintFilters();
+      refreshBadge();
       await load(true);
+    } else {
+      refreshBadge(); // reflect anything just marked read
     }
   }
 
@@ -377,6 +391,7 @@
     if (n == null) return;
     el.badge.textContent = n > 99 ? "99+" : String(n);
     el.badge.classList.toggle("show", n > 0);
+    el.toggle.classList.toggle("has-unread", n > 0); // pulse the bell when unread
   }
 
   // ---- enable / mount ----------------------------------------------------------
@@ -386,7 +401,7 @@
       if (!el) build();
       el.toggle.style.display = "flex";
       refreshBadge();
-      if (!badgeTimer) badgeTimer = setInterval(refreshBadge, 120000);
+      if (!badgeTimer) badgeTimer = setInterval(refreshBadge, 45000);
     } else if (el) {
       el.toggle.style.display = "none";
       togglePanel(false);
