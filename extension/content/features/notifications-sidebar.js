@@ -161,8 +161,10 @@
     s.textContent = `
 #ic-notif-toggle{position:fixed;top:10px;right:120px;z-index:2147483600;width:22px;height:22px;border-radius:50%;background:#6b7280;border:none;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.28);display:flex;align-items:center;justify-content:center;padding:0}
 #ic-notif-toggle svg{width:17px;height:17px;display:block;fill:#fff}
-@keyframes icnBellPulse{0%{box-shadow:0 2px 8px rgba(0,0,0,.28),0 0 0 0 rgba(245,124,0,.5)}50%{box-shadow:0 2px 8px rgba(0,0,0,.28),0 0 12px 12px rgba(245,124,0,.22)}100%{box-shadow:0 2px 8px rgba(0,0,0,.28),0 0 14px 12px rgba(245,124,0,0)}}
-#ic-notif-toggle.has-unread{animation:icnBellPulse 1.6s ease-in-out infinite}
+@keyframes icnBellPulse{0%{box-shadow:0 2px 8px rgba(0,0,0,.28),0 0 2px 0 rgba(245,124,0,.75)}50%{box-shadow:0 2px 8px rgba(0,0,0,.28),0 0 9px 12px rgba(245,124,0,.6)}100%{box-shadow:0 2px 8px rgba(0,0,0,.28),0 0 14px 12px rgba(245,124,0,0)}}
+@keyframes icnBellIcon{0%,100%{fill:#fff}50%{fill:#ff8c1a}}
+#ic-notif-toggle.has-unread{animation:icnBellPulse 1.5s ease-in-out infinite}
+#ic-notif-toggle.has-unread svg{animation:icnBellIcon 1.5s ease-in-out infinite}
 #ic-notif-badge{position:absolute;top:-5px;right:-5px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#e23b3b;color:#fff;font:700 10px -apple-system,system-ui,sans-serif;display:none;align-items:center;justify-content:center;box-sizing:border-box}
 #ic-notif-badge.show{display:flex}
 #ic-notif-panel{position:fixed;top:0;right:0;height:100vh;width:380px;max-width:94vw;background:#fff;color:#1a1a1a;z-index:2147483601;box-shadow:-4px 0 24px rgba(0,0,0,.22);transform:translateX(100%);transition:transform .22s ease;display:flex;flex-direction:column;font:13px -apple-system,system-ui,sans-serif}

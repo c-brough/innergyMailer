@@ -3,6 +3,11 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.15.4] - 2026-10-19
+### Changed
+- Notifications button: stronger, more obvious orange pulse, and the white bell
+  icon now pulses its color too (white ↔ orange) in sync.
+
 ## [1.15.3] - 2026-10-19
 ### Changed
 - Notifications button: also hides Innergy's green unread-count badge on its bell
