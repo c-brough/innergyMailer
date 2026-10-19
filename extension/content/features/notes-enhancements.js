@@ -2,7 +2,10 @@
  *
  * On an Innergy Notes view (#/…/notes[/<noteId>]):
  *   • If the URL points at a specific note (trailing GUID), scroll that note into
- *     view, centered, and give it a 2px red border. The note id isn't in the DOM
+ *     view, centered, and give its own card (not the whole reply thread) a 2px
+ *     orange border with a pulsing orange shadow that stops on hover. (A note's
+ *     <figure> wraps its reply <figure>s, so the border goes on the note's own
+ *     <blockquote> child.) The note id isn't in the DOM
  *     and the app doesn't mark the deep-linked note, so we fetch the note list
  *     (ProjectWorkOrderNotesQuery / ProjectNotesQuery), read the target's body,
  *     and match it to its rendered <figure>. Notes are lazy-rendered, so if it
@@ -25,7 +28,20 @@
   const PROJ_RE = new RegExp("/projects/(" + GUID + ")");
   const RED = "#c62828";
   const HL_CLASS = "ic-note-mention";
-  const BORDER_ATTR = "data-ic-note-target";
+  const TARGET_CLASS = "ic-note-target";
+
+  // Orange border + a 6px pulsing orange shadow that stops once the mouse is
+  // inside the note. Injected once.
+  function ensureStyle() {
+    if (document.getElementById("ic-note-style")) return;
+    const st = document.createElement("style");
+    st.id = "ic-note-style";
+    st.textContent =
+      "@keyframes icNotePulse{0%{box-shadow:0 0 0 0 rgba(245,124,0,.65)}50%{box-shadow:0 0 0 6px rgba(245,124,0,.22)}100%{box-shadow:0 0 0 0 rgba(245,124,0,0)}}" +
+      "." + TARGET_CLASS + "{border:2px solid #f57c00 !important;border-radius:6px !important;animation:icNotePulse 1.4s ease-in-out infinite}" +
+      "." + TARGET_CLASS + ".ic-note-stop{animation:none !important;box-shadow:none !important}";
+    (document.head || document.documentElement).appendChild(st);
+  }
 
   // ---- enabled flag (opt-out) --------------------------------------------------
   let enabled = true;
@@ -182,19 +198,22 @@
     return findFigureByText(probe);
   }
 
+  // A note's own card is the figure's direct child without nested reply figures
+  // (the <blockquote>); the sibling holds the reply thread. Border just the card.
+  function cardOf(fig) {
+    return [...fig.children].find((c) => !c.querySelector("figure")) || fig;
+  }
   function clearBorder() {
-    for (const el of document.querySelectorAll("[" + BORDER_ATTR + "]")) {
-      el.style.border = "";
-      el.style.borderRadius = "";
-      el.removeAttribute(BORDER_ATTR);
-    }
+    for (const el of document.querySelectorAll("." + TARGET_CLASS)) el.classList.remove(TARGET_CLASS, "ic-note-stop");
   }
   function markBorder(fig) {
-    if (fig.getAttribute(BORDER_ATTR)) return;
+    ensureStyle();
+    const card = cardOf(fig);
+    if (!card || card.classList.contains(TARGET_CLASS)) return card;
     clearBorder();
-    fig.setAttribute(BORDER_ATTR, "1");
-    fig.style.border = "2px solid " + RED;
-    fig.style.borderRadius = "6px";
+    card.classList.add(TARGET_CLASS);
+    card.addEventListener("mouseenter", () => card.classList.add("ic-note-stop"), { once: true });
+    return card;
   }
 
   async function handleTarget() {
@@ -214,10 +233,10 @@
       let fig = findFigureByText(probe);
       if (!fig) fig = await scrollSearch(probe);
       if (fig) {
-        markBorder(fig);
+        const card = markBorder(fig);
         if (scrolledNoteId !== noteId) {
           scrolledNoteId = noteId;
-          fig.scrollIntoView({ block: "center", behavior: "smooth" });
+          (card || fig).scrollIntoView({ block: "center", behavior: "smooth" });
         }
       }
     } finally {

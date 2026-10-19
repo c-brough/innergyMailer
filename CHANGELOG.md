@@ -3,6 +3,12 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.13.1] - 2026-10-18
+### Changed
+- Notes Enhancements: the linked-note highlight now outlines only that note's own
+  card (not its whole reply thread), and uses an orange border with a pulsing
+  orange shadow that stops once you hover inside it.
+
 ## [1.13.0] - 2026-10-18
 ### Added
 - **Notes Enhancements** (on by default; opt out in Options). On a Note link that
