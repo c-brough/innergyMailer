@@ -318,6 +318,17 @@ ttBox.addEventListener("change", (e) => {
   showSaved();
 });
 
+// ---- Notes Enhancements (opt-out; ON by default) -----------------------------
+// content/features/notes-enhancements.js reads `notesEnhancementsEnabled`.
+const notesBox = document.getElementById("notes-enabled");
+chrome.storage.local.get("notesEnhancementsEnabled", (data) => {
+  notesBox.checked = data.notesEnhancementsEnabled !== false; // default on
+});
+notesBox.addEventListener("change", (e) => {
+  chrome.storage.local.set({ notesEnhancementsEnabled: e.target.checked });
+  showSaved();
+});
+
 // ---- Settings search ---------------------------------------------------------
 // Filters the collapsible categories: a query shows only the categories whose
 // text matches, opens them, and scrolls the first match into view. Clearing
@@ -578,11 +589,12 @@ ttBox.addEventListener("change", (e) => {
       case "po-email": return data.poEmailEnabled === true;
       case "bom": return !!(data.bomBaseUrl && data.bomBaseUrl.trim());
       case "time-tracking": return data.timeTrackingEnabled === true;
+      case "notes": return data.notesEnhancementsEnabled !== false; // on by default
       default: return false;                     // Updates: neutral
     }
   }
   function refresh() {
-    chrome.storage.local.get(["mailApp", "poEmailEnabled", "bomBaseUrl", "timeTrackingEnabled"], (data) => {
+    chrome.storage.local.get(["mailApp", "poEmailEnabled", "bomBaseUrl", "timeTrackingEnabled", "notesEnhancementsEnabled"], (data) => {
       cats.forEach((c) => c.classList.toggle("cat--on", isOn(c, data)));
       // Mail app gating.
       if (mailCat) {
@@ -595,7 +607,7 @@ ttBox.addEventListener("change", (e) => {
   }
   refresh();
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && (changes.mailApp || changes.poEmailEnabled || changes.bomBaseUrl || changes.timeTrackingEnabled)) refresh();
+    if (area === "local" && (changes.mailApp || changes.poEmailEnabled || changes.bomBaseUrl || changes.timeTrackingEnabled || changes.notesEnhancementsEnabled)) refresh();
   });
 
   // Expand / collapse all (only categories currently shown; never expand a

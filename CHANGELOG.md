@@ -3,6 +3,13 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.13.0] - 2026-10-18
+### Added
+- **Notes Enhancements** (on by default; opt out in Options). On a Note link that
+  points at a specific note, scrolls that note into view (centered) and gives it
+  a 2px red border. Also highlights every mention of your own name in the notes
+  as bold red.
+
 ## [1.12.1] - 2026-10-11
 ### Changed
 - PO email: the attached PDF now defaults to **Export Custom PDF** (your default
