@@ -3,6 +3,11 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.15.2] - 2026-10-19
+### Changed
+- Notifications button: hides Innergy's own header bell while ours is shown
+  (restored if you disable the feature), and the circle + bell are half the size.
+
 ## [1.15.1] - 2026-10-19
 ### Changed
 - Notifications button restyle: the bell icon is twice as large and white on a

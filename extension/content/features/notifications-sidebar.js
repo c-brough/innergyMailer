@@ -159,8 +159,8 @@
     const s = document.createElement("style");
     s.id = "ic-notif-style";
     s.textContent = `
-#ic-notif-toggle{position:fixed;top:10px;right:120px;z-index:2147483600;width:44px;height:44px;border-radius:50%;background:#6b7280;border:none;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.28);display:flex;align-items:center;justify-content:center;padding:0}
-#ic-notif-toggle svg{width:34px;height:34px;display:block;fill:#fff}
+#ic-notif-toggle{position:fixed;top:10px;right:120px;z-index:2147483600;width:22px;height:22px;border-radius:50%;background:#6b7280;border:none;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.28);display:flex;align-items:center;justify-content:center;padding:0}
+#ic-notif-toggle svg{width:17px;height:17px;display:block;fill:#fff}
 @keyframes icnBellPulse{0%{box-shadow:0 2px 8px rgba(0,0,0,.28),0 0 0 0 rgba(245,124,0,.5)}50%{box-shadow:0 2px 8px rgba(0,0,0,.28),0 0 12px 12px rgba(245,124,0,.22)}100%{box-shadow:0 2px 8px rgba(0,0,0,.28),0 0 14px 12px rgba(245,124,0,0)}}
 #ic-notif-toggle.has-unread{animation:icnBellPulse 1.6s ease-in-out infinite}
 #ic-notif-badge{position:absolute;top:-5px;right:-5px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#e23b3b;color:#fff;font:700 10px -apple-system,system-ui,sans-serif;display:none;align-items:center;justify-content:center;box-sizing:border-box}
@@ -272,21 +272,37 @@
   }
 
   // Innergy's header notifications bell is a FontAwesome "fa-bell-o" icon (stable
-  // class). Sit our button over it; fall back to a fixed top-right spot.
-  function findBell() {
+  // class). We sit our button over it and hide the original.
+  function bellIcon() {
     for (const i of document.querySelectorAll(".fa-bell-o, i[class*='fa-bell']")) {
       const r = i.getBoundingClientRect();
-      if (r.width > 0 && r.top < 60) return r; // top header icon
+      if (r.width > 0 && r.top < 60) return i; // top header icon
     }
     return null;
   }
+  let hiddenBell = null;
+  function hideOriginalBell(icon) {
+    const target = icon.closest("a,button") || icon;
+    if (hiddenBell && hiddenBell !== target) restoreBell();
+    target.style.visibility = "hidden"; // keep its space so our button stays aligned
+    hiddenBell = target;
+  }
+  function restoreBell() { if (hiddenBell) { hiddenBell.style.visibility = ""; hiddenBell = null; } }
+
   function positionToggle() {
     if (!el) return;
-    const r = findBell();
+    const icon = bellIcon();
     const t = el.toggle.style;
-    const half = (el.toggle.offsetWidth || 44) / 2;
-    if (r) { t.top = Math.round(r.top + r.height / 2 - half) + "px"; t.left = Math.round(r.left + r.width / 2 - half) + "px"; t.right = "auto"; t.bottom = "auto"; }
-    else { t.top = "10px"; t.right = "120px"; t.left = "auto"; t.bottom = "auto"; }
+    const half = (el.toggle.offsetWidth || 22) / 2;
+    if (icon) {
+      const r = icon.getBoundingClientRect();
+      t.top = Math.round(r.top + r.height / 2 - half) + "px";
+      t.left = Math.round(r.left + r.width / 2 - half) + "px";
+      t.right = "auto"; t.bottom = "auto";
+      hideOriginalBell(icon);
+    } else {
+      t.top = "10px"; t.right = "120px"; t.left = "auto"; t.bottom = "auto";
+    }
   }
 
   function paintSeg() {
@@ -506,6 +522,7 @@
     } else if (el) {
       el.toggle.style.display = "none";
       togglePanel(false);
+      restoreBell(); // give Innergy's own bell back
       if (badgeTimer) { clearInterval(badgeTimer); badgeTimer = null; }
     }
   }
