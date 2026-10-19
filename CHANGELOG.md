@@ -3,6 +3,12 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.15.1] - 2026-10-19
+### Changed
+- Notifications button restyle: the bell icon is twice as large and white on a
+  gray circle, with a wider (12px), softer orange pulse that fades toward the
+  edges.
+
 ## [1.15.0] - 2026-10-19
 ### Added
 - Notifications sidebar: the **project name** now shows in front of the
