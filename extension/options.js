@@ -332,7 +332,7 @@ notesBox.addEventListener("change", (e) => {
 // ---- Notifications sidebar (opt-in) + default filters ------------------------
 // content/features/notifications-sidebar.js reads notifSidebarEnabled,
 // notifDefaultStatus and notifTypes ({notes,tasks,reports,other}).
-const NOTIF_TYPES = ["notes", "tasks", "reports", "other"];
+const NOTIF_TYPES = ["mentioned", "replies", "assigned", "reports", "other"];
 const notifBox = document.getElementById("notif-enabled");
 const notifStatus = document.getElementById("notif-default-status");
 const notifTypeBoxes = NOTIF_TYPES.map((t) => document.getElementById("notif-type-" + t));

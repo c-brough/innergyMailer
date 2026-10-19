@@ -23,8 +23,10 @@
   const IC = window.InnerCider;
   const ORIGIN = "https://app.innergy.com";
   const PAGE = 30;
-  const TYPES = ["notes", "tasks", "reports", "other"];
-  const TYPE_LABEL = { notes: "Notes", tasks: "Tasks", reports: "Reports", other: "Other" };
+  const TYPES = ["mentioned", "replies", "assigned", "reports", "other"];
+  const TYPE_LABEL = { mentioned: "Mentioned", replies: "Replies", assigned: "Assigned", reports: "Reports", other: "Other" };
+  // Innergy task/quest status id → label + pill color.
+  const STATUS_COLOR = { 1: "#8a93a0", 2: "#1a56db", 3: "#e08600", 4: "#7b4fd1", 5: "#2e9e5b", 6: "#c62828" };
 
   // ---- settings (opt-in + default filters) -------------------------------------
   const settings = { enabled: false, defaultStatus: "unread", types: { notes: true, tasks: true, reports: true, other: true } };
@@ -83,16 +85,53 @@
     };
   }
   function category(it) {
-    if (it.bodyType === "ProjectWorkOrderNote" || it.bodyType === "ProjectNote") return "notes";
-    if (it.bodyType === "Quest") {
-      const t = (it.body || "").toLowerCase();
-      if (/report|generat/.test(t)) return "reports";
-      if (/task/.test(t)) return "tasks";
-      return "other";
-    }
+    const t = (it.body || "").toLowerCase();
+    if (/mention/.test(t)) return "mentioned";
+    if (it.bodyType === "ProjectWorkOrderNote" || it.bodyType === "ProjectNote") return "replies";
+    if (/assigned/.test(t)) return "assigned";
+    if (/report|generat/.test(t)) return "reports";
     return "other";
   }
   const isNote = (it) => it.bodyType === "ProjectWorkOrderNote" || it.bodyType === "ProjectNote";
+  const isTask = (it) => it.bodyType === "Quest" && /assigned|task/i.test(it.body || "");
+  function questId(it) { const m = (it.bodyUrl || "").match(/[?&]id=([0-9a-fA-F-]{36})/); return m ? m[1] : null; }
+
+  // ---- project names (number → descriptive name) -------------------------------
+  let projByNum = null, projPromise = null;
+  function ensureProjects() {
+    if (projByNum) return Promise.resolve(projByNum);
+    if (projPromise) return projPromise;
+    projPromise = runQuery({ $type: "ProjectsPickerQuery" })
+      .then((arr) => {
+        projByNum = {};
+        if (Array.isArray(arr)) for (const p of arr) { const m = (p.name || "").match(/^(P-\d+-\d+)/i); if (m) projByNum[m[1].toUpperCase()] = p.name; }
+        return projByNum;
+      })
+      .catch(() => (projByNum = {}));
+    return projPromise;
+  }
+  function projectNameForContext(contextText) {
+    if (!projByNum || !contextText) return "";
+    const m = contextText.match(/^(P-\d+-\d+)/i);
+    if (!m) return "";
+    const full = projByNum[m[1].toUpperCase()];
+    return full ? full.replace(/^P-\d+-\d+\s*-\s*/i, "").trim() : "";
+  }
+
+  // ---- task due date + status (lazy, cached) -----------------------------------
+  const questCache = {}; // qid -> {dueDate, statusId, statusName} | "loading"
+  async function fetchQuest(qid) {
+    if (questCache[qid] && questCache[qid] !== "loading") return questCache[qid];
+    questCache[qid] = "loading";
+    try {
+      const j = await runQuery({ Id: qid, $type: "QuestEditQuery" });
+      const statuses = (j && j.availableStatuses) || [];
+      const sn = (statuses.find((s) => s.id === j.status) || {}).name || "";
+      const info = { dueDate: j && j.dueDate && j.dueDate.dateTime, statusId: j && j.status, statusName: sn };
+      questCache[qid] = info;
+      return info;
+    } catch (e) { questCache[qid] = null; return null; }
+  }
 
   function fullUrl(u) {
     if (!u) return null;
@@ -120,10 +159,11 @@
     const s = document.createElement("style");
     s.id = "ic-notif-style";
     s.textContent = `
-#ic-notif-toggle{position:fixed;right:18px;bottom:18px;z-index:2147483600;width:46px;height:46px;border-radius:50%;background:#1a56db;color:#fff;border:none;cursor:pointer;box-shadow:0 3px 12px rgba(0,0,0,.3);font-size:20px;display:flex;align-items:center;justify-content:center}
-@keyframes icnBellPulse{0%{box-shadow:0 3px 12px rgba(0,0,0,.3),0 0 0 0 rgba(245,124,0,.65)}50%{box-shadow:0 3px 12px rgba(0,0,0,.3),0 0 0 6px rgba(245,124,0,.28)}100%{box-shadow:0 3px 12px rgba(0,0,0,.3),0 0 0 0 rgba(245,124,0,0)}}
+#ic-notif-toggle{position:fixed;top:10px;right:120px;z-index:2147483600;width:30px;height:30px;border-radius:50%;background:#f57c00;border:none;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.28);display:flex;align-items:center;justify-content:center;padding:0}
+#ic-notif-toggle svg{width:17px;height:17px;display:block;fill:#1a56db}
+@keyframes icnBellPulse{0%{box-shadow:0 2px 8px rgba(0,0,0,.28),0 0 0 0 rgba(245,124,0,.7)}50%{box-shadow:0 2px 8px rgba(0,0,0,.28),0 0 0 6px rgba(245,124,0,.3)}100%{box-shadow:0 2px 8px rgba(0,0,0,.28),0 0 0 0 rgba(245,124,0,0)}}
 #ic-notif-toggle.has-unread{animation:icnBellPulse 1.5s ease-in-out infinite}
-#ic-notif-badge{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:#e23b3b;color:#fff;font:700 11px -apple-system,system-ui,sans-serif;display:none;align-items:center;justify-content:center;box-sizing:border-box}
+#ic-notif-badge{position:absolute;top:-5px;right:-5px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#e23b3b;color:#fff;font:700 10px -apple-system,system-ui,sans-serif;display:none;align-items:center;justify-content:center;box-sizing:border-box}
 #ic-notif-badge.show{display:flex}
 #ic-notif-panel{position:fixed;top:0;right:0;height:100vh;width:380px;max-width:94vw;background:#fff;color:#1a1a1a;z-index:2147483601;box-shadow:-4px 0 24px rgba(0,0,0,.22);transform:translateX(100%);transition:transform .22s ease;display:flex;flex-direction:column;font:13px -apple-system,system-ui,sans-serif}
 #ic-notif-panel.open{transform:translateX(0)}
@@ -147,7 +187,11 @@
 .icn-dot{position:absolute;left:5px;top:14px;width:7px;height:7px;border-radius:50%;background:#f57c00}
 .icn-body{font-size:12.8px;line-height:1.4;margin-left:4px}
 .icn-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:6px 0 0 4px;font-size:11.5px;color:#777}
-.icn-chip{background:#eef2fd;border:1px solid #c7d0f8;border-radius:10px;padding:1px 7px;color:#1a3a8a;cursor:pointer;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.icn-ctx{margin:6px 0 0 4px}
+.icn-chip{display:inline-block;background:#eef2fd;border:1px solid #c7d0f8;border-radius:10px;padding:2px 8px;color:#1a3a8a;cursor:pointer;max-width:100%;line-height:1.35;font-size:12px;white-space:normal;word-break:break-word}
+.icn-task{margin:6px 0 0 4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.icn-pill{display:inline-block;padding:1px 9px;border-radius:10px;font-size:11px;font-weight:700}
+.icn-due{font-size:11.5px;color:#777}
 .icn-act{color:#1a56db;cursor:pointer}
 .icn-more{padding:10px;text-align:center;color:#1a56db;cursor:pointer;font-size:12.5px}
 .icn-empty{padding:24px 14px;text-align:center;color:#999}
@@ -168,7 +212,9 @@
     ensureStyle();
     const toggle = document.createElement("button");
     toggle.id = "ic-notif-toggle"; toggle.title = "Innergy notifications";
-    toggle.innerHTML = "🔔<span id='ic-notif-badge'></span>";
+    toggle.innerHTML =
+      "<svg viewBox='0 0 24 24'><path d='M12 2a6 6 0 0 0-6 6v3.6l-1.3 2.6A1 1 0 0 0 5.6 16h12.8a1 1 0 0 0 .9-1.4L18 11.6V8a6 6 0 0 0-6-6zm0 20a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22z'/></svg>" +
+      "<span id='ic-notif-badge'></span>";
     toggle.addEventListener("click", () => togglePanel());
 
     const panel = document.createElement("div");
@@ -219,6 +265,27 @@
     el.search.addEventListener("input", () => { state.search = el.search.value.trim().toLowerCase(); render(); });
     el.filterPop.addEventListener("change", (e) => { const t = e.target.getAttribute("data-t"); if (t) { state.types[t] = e.target.checked; render(); } });
     document.addEventListener("mousedown", onDocDown, true);
+    window.addEventListener("resize", positionToggle);
+    window.addEventListener("hashchange", () => setTimeout(positionToggle, 400));
+    positionToggle();
+    setTimeout(positionToggle, 700); setTimeout(positionToggle, 1800); // header may render late
+  }
+
+  // Innergy's header notifications bell is a FontAwesome "fa-bell-o" icon (stable
+  // class). Sit our button over it; fall back to a fixed top-right spot.
+  function findBell() {
+    for (const i of document.querySelectorAll(".fa-bell-o, i[class*='fa-bell']")) {
+      const r = i.getBoundingClientRect();
+      if (r.width > 0 && r.top < 60) return r; // top header icon
+    }
+    return null;
+  }
+  function positionToggle() {
+    if (!el) return;
+    const r = findBell();
+    const t = el.toggle.style;
+    if (r) { t.top = Math.round(r.top + r.height / 2 - 15) + "px"; t.left = Math.round(r.left + r.width / 2 - 15) + "px"; t.right = "auto"; t.bottom = "auto"; }
+    else { t.top = "10px"; t.right = "120px"; t.left = "auto"; t.bottom = "auto"; }
   }
 
   function paintSeg() {
@@ -259,7 +326,8 @@
     if (reset) { state.items = []; state.skip = 0; el.list.innerHTML = ""; }
     el.status.textContent = "Loading…";
     try {
-      const { rows, total } = await fetchPage(state.status, state.skip);
+      const [page] = await Promise.all([fetchPage(state.status, state.skip), ensureProjects()]);
+      const { rows, total } = page;
       state.total = total;
       state.skip += rows.length;
       state.items = state.items.concat(rows.map(model));
@@ -302,21 +370,53 @@
   function itemEl(it) {
     const row = document.createElement("div");
     row.className = "icn-item" + (it.isRead ? "" : " unread");
+    if (!it.isRead) { const dot = document.createElement("div"); dot.className = "icn-dot"; row.appendChild(dot); }
     const body = document.createElement("div");
     body.className = "icn-body"; body.textContent = it.body;
     body.addEventListener("click", () => go(it.bodyUrl, it.bodyNewTab));
-    if (!it.isRead) { const dot = document.createElement("div"); dot.className = "icn-dot"; row.appendChild(dot); }
     row.appendChild(body);
+
+    // Context line: project name (left) + the project/work-order link.
+    if (it.context) {
+      const line = document.createElement("div");
+      line.className = "icn-ctx";
+      const chip = document.createElement("span");
+      chip.className = "icn-chip";
+      const pn = projectNameForContext(it.context);
+      chip.textContent = (pn ? pn + "  ·  " : "") + it.context;
+      chip.title = "Open " + chip.textContent;
+      chip.addEventListener("click", (e) => { e.stopPropagation(); go(it.contextUrl, it.contextNewTab); });
+      line.appendChild(chip);
+      row.appendChild(line);
+    }
+
+    // Task notifications: current due date + a status pill (fetched lazily).
+    if (isTask(it)) {
+      const qid = questId(it);
+      if (qid) {
+        const wrap = document.createElement("div");
+        wrap.className = "icn-task";
+        wrap.innerHTML = `<span class="icn-pill" style="background:#eee;color:#888">loading…</span>`;
+        row.appendChild(wrap);
+        fetchQuest(qid).then((info) => {
+          if (!info) { wrap.remove(); return; }
+          wrap.innerHTML = "";
+          const s = document.createElement("span");
+          s.className = "icn-pill"; s.textContent = info.statusName || "—";
+          s.style.background = STATUS_COLOR[info.statusId] || "#777"; s.style.color = "#fff";
+          wrap.appendChild(s);
+          if (info.dueDate) {
+            const due = document.createElement("span");
+            due.className = "icn-due"; due.textContent = "Due " + fmtTime(info.dueDate);
+            wrap.appendChild(due);
+          }
+        });
+      }
+    }
 
     const meta = document.createElement("div");
     meta.className = "icn-meta";
     meta.appendChild(Object.assign(document.createElement("span"), { textContent: fmtTime(it.created) }));
-    if (it.context) {
-      const chip = document.createElement("span");
-      chip.className = "icn-chip"; chip.textContent = it.context; chip.title = "Open " + it.context;
-      chip.addEventListener("click", (e) => { e.stopPropagation(); go(it.contextUrl, it.contextNewTab); });
-      meta.appendChild(chip);
-    }
     if (isNote(it)) {
       const prev = document.createElement("span");
       prev.className = "icn-act"; prev.textContent = "Preview";

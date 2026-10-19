@@ -3,6 +3,16 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.15.0] - 2026-10-19
+### Added
+- Notifications sidebar: the **project name** now shows in front of the
+  project/work-order context link; **task** notifications show the current **due
+  date + a status pill**; and the type filters are now **Mentioned / Replies /
+  Assigned / Reports / Other** (Options defaults updated to match).
+### Changed
+- The notifications button now sits **over Innergy's own header bell** (top
+  right), at ~2/3 the size, as an orange circle with a blue bell icon.
+
 ## [1.14.1] - 2026-10-18
 ### Changed
 - Notifications sidebar: clicking outside the panel now closes it; the unread
