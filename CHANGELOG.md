@@ -3,6 +3,16 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.14.0] - 2026-10-18
+### Added
+- **Notifications sidebar** (opt-in). A floating 🔔 button opens a right-docked
+  panel that mirrors your Innergy notifications without leaving the page:
+  read/unread/all filter, quick search, type filters (Notes / Tasks / Reports /
+  Other), an unread-count badge, click to open the linked note/task/report, a
+  context chip to the project/work order, an inline **Preview** of note replies,
+  and **mark one / mark all read** (real updates to Innergy). Default filters are
+  configurable in Options and seed each fresh open.
+
 ## [1.13.1] - 2026-10-18
 ### Changed
 - Notes Enhancements: the linked-note highlight now outlines only that note's own

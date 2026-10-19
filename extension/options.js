@@ -329,6 +329,29 @@ notesBox.addEventListener("change", (e) => {
   showSaved();
 });
 
+// ---- Notifications sidebar (opt-in) + default filters ------------------------
+// content/features/notifications-sidebar.js reads notifSidebarEnabled,
+// notifDefaultStatus and notifTypes ({notes,tasks,reports,other}).
+const NOTIF_TYPES = ["notes", "tasks", "reports", "other"];
+const notifBox = document.getElementById("notif-enabled");
+const notifStatus = document.getElementById("notif-default-status");
+const notifTypeBoxes = NOTIF_TYPES.map((t) => document.getElementById("notif-type-" + t));
+chrome.storage.local.get(["notifSidebarEnabled", "notifDefaultStatus", "notifTypes"], (d) => {
+  notifBox.checked = d.notifSidebarEnabled === true;
+  notifStatus.value = d.notifDefaultStatus || "unread";
+  const types = d.notifTypes || {};
+  NOTIF_TYPES.forEach((t, i) => { notifTypeBoxes[i].checked = types[t] !== false; }); // default all on
+});
+function saveNotifTypes() {
+  const types = {};
+  NOTIF_TYPES.forEach((t, i) => { types[t] = notifTypeBoxes[i].checked; });
+  chrome.storage.local.set({ notifTypes: types });
+  showSaved();
+}
+notifBox.addEventListener("change", (e) => { chrome.storage.local.set({ notifSidebarEnabled: e.target.checked }); showSaved(); });
+notifStatus.addEventListener("change", (e) => { chrome.storage.local.set({ notifDefaultStatus: e.target.value }); showSaved(); });
+notifTypeBoxes.forEach((cb) => cb.addEventListener("change", saveNotifTypes));
+
 // ---- Settings search ---------------------------------------------------------
 // Filters the collapsible categories: a query shows only the categories whose
 // text matches, opens them, and scrolls the first match into view. Clearing
@@ -590,11 +613,12 @@ notesBox.addEventListener("change", (e) => {
       case "bom": return !!(data.bomBaseUrl && data.bomBaseUrl.trim());
       case "time-tracking": return data.timeTrackingEnabled === true;
       case "notes": return data.notesEnhancementsEnabled !== false; // on by default
+      case "notifications": return data.notifSidebarEnabled === true;
       default: return false;                     // Updates: neutral
     }
   }
   function refresh() {
-    chrome.storage.local.get(["mailApp", "poEmailEnabled", "bomBaseUrl", "timeTrackingEnabled", "notesEnhancementsEnabled"], (data) => {
+    chrome.storage.local.get(["mailApp", "poEmailEnabled", "bomBaseUrl", "timeTrackingEnabled", "notesEnhancementsEnabled", "notifSidebarEnabled"], (data) => {
       cats.forEach((c) => c.classList.toggle("cat--on", isOn(c, data)));
       // Mail app gating.
       if (mailCat) {
@@ -607,7 +631,7 @@ notesBox.addEventListener("change", (e) => {
   }
   refresh();
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && (changes.mailApp || changes.poEmailEnabled || changes.bomBaseUrl || changes.timeTrackingEnabled || changes.notesEnhancementsEnabled)) refresh();
+    if (area === "local" && (changes.mailApp || changes.poEmailEnabled || changes.bomBaseUrl || changes.timeTrackingEnabled || changes.notesEnhancementsEnabled || changes.notifSidebarEnabled)) refresh();
   });
 
   // Expand / collapse all (only categories currently shown; never expand a

@@ -479,6 +479,41 @@
       </div>
     </details>
 
+    <!-- ===== Notifications sidebar ================================ -->
+    <details class="cat" data-cat="notifications">
+      <summary>Notifications sidebar <span class="cat-tag">opt-in</span></summary>
+      <div class="cat-body">
+        <fieldset id="fs-notif">
+          <p class="fs-note">
+            A right-docked panel (opened by a floating 🔔 button) that mirrors your Innergy
+            notifications: search, read/unread filter, click to open the note/task/report,
+            preview note replies, and mark read — right from the page.
+          </p>
+          <label class="opt">
+            <input type="checkbox" id="notif-enabled" />
+            Enable the notifications sidebar
+          </label>
+
+          <p class="fs-note" style="margin-top:12px">These set the <strong>default</strong> filters each time the panel is freshly opened (you can change them live):</p>
+          <div class="upd-row">
+            <label for="notif-default-status">Show by default:</label>
+            <select id="notif-default-status">
+              <option value="unread">Unread</option>
+              <option value="read">Read</option>
+              <option value="all">All</option>
+            </select>
+          </div>
+          <div style="margin-top:6px">
+            <div style="font-size:12px;font-weight:600;color:#444;margin-bottom:4px">Include these types by default:</div>
+            <label class="opt"><input type="checkbox" id="notif-type-notes" /> Notes (replies &amp; mentions)</label>
+            <label class="opt"><input type="checkbox" id="notif-type-tasks" /> Tasks</label>
+            <label class="opt"><input type="checkbox" id="notif-type-reports" /> Reports</label>
+            <label class="opt"><input type="checkbox" id="notif-type-other" /> Other</label>
+          </div>
+        </fieldset>
+      </div>
+    </details>
+
     <div id="status"></div>
 
     <!-- Changelog modal (populated by options.js). -->
