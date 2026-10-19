@@ -226,7 +226,11 @@
       .ic-dc-draft .ic-dc-btn:hover{background:#f1f5f9}
       .ic-dc-draft .ic-dc-btn.ic-del{color:#b91c1c;border-color:#fecaca}
       .ic-dc-draft .ic-dc-btn.ic-del:hover{background:#fef2f2}
-      .ic-dc-draft .ic-dc-prev{padding:12px 14px;max-height:260px;overflow:auto;white-space:pre-wrap;word-break:break-word;font-size:13px;color:#1f2937;background:#fff}
+      .ic-dc-draft .ic-dc-prev{padding:12px 14px;max-height:320px;overflow:auto;word-break:break-word;font-size:13px;color:#1f2937;background:#fff}
+      .ic-dc-draft .ic-dc-prev.ic-plain{white-space:pre-wrap}
+      .ic-dc-draft .ic-dc-prev img{max-width:100%;height:auto;border-radius:4px;margin:4px 0;display:block}
+      .ic-dc-draft .ic-dc-prev p{margin:0 0 6px}
+      .ic-dc-draft .ic-dc-prev a{color:#1a56db}
       .ic-dc-draft.ic-collapsed .ic-dc-prev{display:none}
       #ic-draft-card .ic-dc-empty{color:#64748b;text-align:center;padding:28px}
     `;
@@ -363,11 +367,60 @@
     const del = document.createElement("button"); del.className = "ic-dc-btn ic-del"; del.textContent = "Delete";
     del.addEventListener("click", (e) => { e.stopPropagation(); opts.onDelete(); });
     bar.appendChild(copy); bar.appendChild(del);
-    const prev = document.createElement("div"); prev.className = "ic-dc-prev"; prev.textContent = draft.text || "";
+    const prev = document.createElement("div"); prev.className = "ic-dc-prev";
+    fillPreview(prev, draft);
     row.appendChild(bar); row.appendChild(prev);
     // Collapsible older rows: clicking the bar (not a button) toggles.
     if (!opts.latest) bar.addEventListener("click", (e) => { if (e.target.closest(".ic-dc-btn")) return; row.classList.toggle("ic-collapsed"); });
     return row;
+  }
+
+  // Render the draft's rich content (so pasted images, kept by Innergy as
+  // uploaded <img> URLs, show in place) — but sanitized: parse into a detached
+  // document, keep only a safe tag/attribute whitelist, and build fresh nodes so
+  // no script, inline handler, or odd protocol survives. Falls back to the plain
+  // text if there's no usable HTML.
+  const PREV_TAGS = new Set(["P", "BR", "B", "I", "U", "S", "STRONG", "EM", "SPAN", "DIV",
+    "A", "UL", "OL", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "BLOCKQUOTE", "PRE", "CODE",
+    "HR", "IMG", "TABLE", "THEAD", "TBODY", "TR", "TD", "TH", "FIGURE", "FIGCAPTION"]);
+  const PREV_DROP = new Set(["SCRIPT", "STYLE", "IFRAME", "OBJECT", "EMBED", "LINK", "META", "NOSCRIPT", "TEMPLATE", "SVG"]);
+
+  function sanitizeInto(srcNode, out) {
+    for (const child of [...srcNode.childNodes]) {
+      if (child.nodeType === 3) { out.appendChild(document.createTextNode(child.nodeValue)); continue; }
+      if (child.nodeType !== 1) continue;
+      const tag = child.tagName;
+      if (PREV_DROP.has(tag)) continue;
+      if (!PREV_TAGS.has(tag)) { sanitizeInto(child, out); continue; } // unwrap unknown tags
+      const el = document.createElement(tag);
+      if (tag === "A") {
+        const href = child.getAttribute("href") || "";
+        if (/^https?:/i.test(href)) { el.setAttribute("href", href); el.setAttribute("target", "_blank"); el.setAttribute("rel", "noopener noreferrer"); }
+      } else if (tag === "IMG") {
+        const src = child.getAttribute("src") || "";
+        if (!/^https?:/i.test(src)) continue; // only keep uploaded (http/https) images
+        el.setAttribute("src", src);
+        const alt = child.getAttribute("alt"); if (alt) el.setAttribute("alt", alt);
+        el.setAttribute("loading", "lazy");
+      }
+      sanitizeInto(child, el);
+      out.appendChild(el);
+    }
+  }
+
+  function fillPreview(prev, draft) {
+    prev.innerHTML = "";
+    let built = null;
+    if (draft.html) {
+      try {
+        const doc = new DOMParser().parseFromString(draft.html, "text/html");
+        const frag = document.createElement("div");
+        sanitizeInto(doc.body, frag);
+        if (frag.childNodes.length) built = frag;
+      } catch (e) { built = null; }
+    }
+    if (built) { prev.classList.remove("ic-plain"); while (built.firstChild) prev.appendChild(built.firstChild); }
+    else { prev.classList.add("ic-plain"); prev.textContent = draft.text || ""; }
   }
 
   function doCopy(draft, btn) {

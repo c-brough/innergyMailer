@@ -3,6 +3,14 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.16.2] - 2026-10-19
+### Changed
+- Note drafts now **show images** in the preview. Images you paste into a note are
+  uploaded by Innergy and kept as normal image links, so they were already saved
+  in your drafts — but the preview only showed plain text. It now renders the
+  draft's formatting and images (sanitized) in place, and **Copy** still restores
+  them when you paste a draft back. (Same in the Options drafts list.)
+
 ## [1.16.1] - 2026-10-19
 ### Fixed
 - Note draft autosave was re-reading storage and measuring layout on **every**

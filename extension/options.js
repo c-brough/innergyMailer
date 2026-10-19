@@ -354,6 +354,49 @@ function ndRelTime(ts) {
   return new Date(ts).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+// Sanitized rich preview (so uploaded images show in place); falls back to text.
+const ND_PREV_TAGS = new Set(["P", "BR", "B", "I", "U", "S", "STRONG", "EM", "SPAN", "DIV",
+  "A", "UL", "OL", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "BLOCKQUOTE", "PRE", "CODE",
+  "HR", "IMG", "TABLE", "THEAD", "TBODY", "TR", "TD", "TH", "FIGURE", "FIGCAPTION"]);
+const ND_PREV_DROP = new Set(["SCRIPT", "STYLE", "IFRAME", "OBJECT", "EMBED", "LINK", "META", "NOSCRIPT", "TEMPLATE", "SVG"]);
+function ndSanitizeInto(srcNode, out) {
+  for (const child of [...srcNode.childNodes]) {
+    if (child.nodeType === 3) { out.appendChild(document.createTextNode(child.nodeValue)); continue; }
+    if (child.nodeType !== 1) continue;
+    const tag = child.tagName;
+    if (ND_PREV_DROP.has(tag)) continue;
+    if (!ND_PREV_TAGS.has(tag)) { ndSanitizeInto(child, out); continue; }
+    const el = document.createElement(tag);
+    if (tag === "A") {
+      const href = child.getAttribute("href") || "";
+      if (/^https?:/i.test(href)) { el.setAttribute("href", href); el.setAttribute("target", "_blank"); el.setAttribute("rel", "noopener noreferrer"); }
+    } else if (tag === "IMG") {
+      const src = child.getAttribute("src") || "";
+      if (!/^https?:/i.test(src)) continue;
+      el.setAttribute("src", src);
+      el.style.maxWidth = "100%"; el.style.height = "auto"; el.style.borderRadius = "4px"; el.style.display = "block"; el.style.margin = "4px 0";
+      const alt = child.getAttribute("alt"); if (alt) el.setAttribute("alt", alt);
+      el.setAttribute("loading", "lazy");
+    }
+    ndSanitizeInto(child, el);
+    out.appendChild(el);
+  }
+}
+function ndFillPreview(prev, draft) {
+  prev.innerHTML = "";
+  let built = null;
+  if (draft.html) {
+    try {
+      const doc = new DOMParser().parseFromString(draft.html, "text/html");
+      const frag = document.createElement("div");
+      ndSanitizeInto(doc.body, frag);
+      if (frag.childNodes.length) built = frag;
+    } catch (e) { built = null; }
+  }
+  if (built) { prev.style.whiteSpace = "normal"; while (built.firstChild) prev.appendChild(built.firstChild); }
+  else { prev.style.whiteSpace = "pre-wrap"; prev.textContent = draft.text || ""; }
+}
+
 function ndCopy(draft, btn) {
   const done = () => { const o = btn.textContent; btn.textContent = "Copied!"; setTimeout(() => (btn.textContent = o), 1400); };
   try {
@@ -423,8 +466,8 @@ function renderDrafts() {
         });
         bar.appendChild(when); bar.appendChild(copy); bar.appendChild(del);
         const prev = document.createElement("div");
-        prev.style.cssText = "white-space:pre-wrap;word-break:break-word;font-size:12px;color:#222;max-height:120px;overflow:auto;background:#fff;border:1px solid #eef0f3;border-radius:6px;padding:7px 9px";
-        prev.textContent = draft.text || "";
+        prev.style.cssText = "word-break:break-word;font-size:12px;color:#222;max-height:160px;overflow:auto;background:#fff;border:1px solid #eef0f3;border-radius:6px;padding:7px 9px";
+        ndFillPreview(prev, draft);
         row.appendChild(bar); row.appendChild(prev);
         group.appendChild(row);
       });
