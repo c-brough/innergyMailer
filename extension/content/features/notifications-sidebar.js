@@ -393,7 +393,7 @@
     if (!it.isRead) { const dot = document.createElement("div"); dot.className = "icn-dot"; row.appendChild(dot); }
     const body = document.createElement("div");
     body.className = "icn-body"; body.textContent = it.body;
-    body.addEventListener("click", () => go(it.bodyUrl, it.bodyNewTab));
+    body.addEventListener("click", () => { markReadNow(it); go(it.bodyUrl, it.bodyNewTab); });
     row.appendChild(body);
 
     // Context line: project name (left) + the project/work-order link.
@@ -405,7 +405,7 @@
       const pn = projectNameForContext(it.context);
       chip.textContent = (pn ? pn + "  ·  " : "") + it.context;
       chip.title = "Open " + chip.textContent;
-      chip.addEventListener("click", (e) => { e.stopPropagation(); go(it.contextUrl, it.contextNewTab); });
+      chip.addEventListener("click", (e) => { e.stopPropagation(); markReadNow(it); go(it.contextUrl, it.contextNewTab); });
       line.appendChild(chip);
       row.appendChild(line);
     }
@@ -440,7 +440,7 @@
     if (isNote(it)) {
       const prev = document.createElement("span");
       prev.className = "icn-act"; prev.textContent = "Preview";
-      prev.addEventListener("click", (e) => { e.stopPropagation(); showNotePopup(it); });
+      prev.addEventListener("click", (e) => { e.stopPropagation(); markReadNow(it); showNotePopup(it); });
       meta.appendChild(prev);
     }
     const mark = document.createElement("span");
@@ -457,6 +457,13 @@
     const r = await runCommand({ Id: it.id, MarkAsRead: next, $type: "NotificationItemToggleReadCommand" });
     if (r.ok) { it.isRead = next; render(); refreshBadge(); }
     else el.status.textContent = "Couldn't update: " + (r.messages || "error");
+  }
+  // Mark read when opening/previewing (no-op if already read).
+  function markReadNow(it) {
+    if (it.isRead) return;
+    runCommand({ Id: it.id, MarkAsRead: true, $type: "NotificationItemToggleReadCommand" }).then((r) => {
+      if (r.ok) { it.isRead = true; render(); refreshBadge(); }
+    });
   }
   async function markAll() {
     const ids = state.items.filter((it) => !it.isRead).map((it) => it.id);

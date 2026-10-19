@@ -3,6 +3,12 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.16.0] - 2026-10-19
+### Changed
+- Notifications sidebar: clicking a notification's body, its context chip, or
+  **Preview** now marks that notification read (a real update to Innergy), so
+  opening something to look at it clears it like you'd expect.
+
 ## [1.15.4] - 2026-10-19
 ### Changed
 - Notifications button: stronger, more obvious orange pulse, and the white bell
