@@ -61,8 +61,15 @@
   const set = (obj) => new Promise((res) => { try { chrome.storage.local.set(obj, res); } catch (e) { res(); } });
 
   // ---- geometry (synthetic rectangles on the open sheet) ---------------------
-  function locRect(i) { const y0 = 120 + i * 150; return [100, y0, 240, y0 + 120]; }
-  function prodRect(i, j) { const lx = 100, ly = 120 + i * 150; const x0 = lx + 12 + (j % 3) * 42, y0 = ly + 12 + Math.floor(j / 3) * 34; return [x0, y0, x0 + 30, y0 + 28]; }
+  // New locations go in a column FAR to the left of the blueprint (empty space),
+  // as small stacked rects — a location rectangle that overlaps a product already
+  // belonging to another location is rejected ("Product intersects multiple
+  // Locations"). Blueprints live in positive coordinates, so a large negative X is
+  // reliably clear, and size doesn't affect a fixed-price product's cost. Each
+  // product's cost object is a tiny rect nested inside its own location rect.
+  const COL_X = -3000;
+  function locRect(i) { const y0 = 100 + i * 140; return [COL_X, y0, COL_X + 90, y0 + 90]; }
+  function prodRect(i, j) { const ly = 100 + i * 140; const x0 = COL_X + 10 + (j % 4) * 18, y0 = ly + 10 + Math.floor(j / 4) * 18; return [x0, y0, x0 + 12, y0 + 12]; }
   function points(r) { return [[r[0], r[1]], [r[2], r[1]], [r[2], r[3]], [r[0], r[3]]].map(([x, y]) => ({ x, y, order: 0, $type: "PointDto" })); }
   function shape(rect, layerId, sheetId, isLoc) {
     return {

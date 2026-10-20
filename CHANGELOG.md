@@ -3,6 +3,13 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.18.2] - 2026-10-19
+### Fixed
+- Quick Change Order wizard commit failed at "placing location" when the generated
+  location rectangle overlapped existing products on the sheet ("Product intersects
+  multiple Locations"). New locations are now placed as small rectangles in a clear
+  area off to the side of the blueprint, so they never collide with existing work.
+
 ## [1.18.1] - 2026-10-19
 ### Fixed
 - Quick Change Order wizard: typing in a location/product field lost focus every
