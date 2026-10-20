@@ -3,6 +3,13 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.17.2] - 2026-10-19
+### Changed
+- Quick Change Order wizard: the open button is now a **black magician's wand with
+  sparkles** (borderless) instead of a boxed button, and product **price** fields
+  show as **US currency** ($1,234.56 — two decimals + thousands separators) when
+  not being edited.
+
 ## [1.17.1] - 2026-10-19
 ### Fixed
 - Quick Change Order wizard button didn't appear: reading the DevExtreme grid

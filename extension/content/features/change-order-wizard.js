@@ -88,10 +88,13 @@
     return b;
   }
 
+  // A black magician's wand with sparkles.
   const WAND_SVG =
     '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
-    '<path d="M5 19l9-9M14.5 6.5l3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>' +
-    '<path d="M16 3l.6 1.6L18 5l-1.4.6L16 7l-.6-1.4L14 5l1.4-.4L16 3zM6 7l.5 1.3L8 9l-1.5.6L6 11l-.5-1.4L4 9l1.5-.6L6 7z" fill="currentColor"/></svg>';
+    '<path d="M4.5 19.5 14.5 9.5" stroke="#111" stroke-width="2.4" stroke-linecap="round"/>' +
+    '<path d="M17 3c.33 1.74 1.03 2.44 2.8 2.8-1.77.36-2.47 1.06-2.8 2.8-.33-1.74-1.03-2.44-2.8-2.8 1.77-.36 2.47-1.06 2.8-2.8z" fill="#111"/>' +
+    '<path d="M8.2 3.6c.2 1.04.58 1.42 1.6 1.6-1.02.2-1.4.58-1.6 1.6-.2-1.02-.58-1.4-1.6-1.6 1.02-.2 1.4-.56 1.6-1.6z" fill="#111"/>' +
+    '<path d="M20.4 10.4c.16.82.46 1.12 1.3 1.3-.84.16-1.14.46-1.3 1.3-.16-.84-.46-1.14-1.3-1.3.84-.18 1.14-.48 1.3-1.3z" fill="#111"/></svg>';
 
   // ---- storage ---------------------------------------------------------------
   function loadAll() {
@@ -197,10 +200,21 @@
     const row = document.createElement("div"); row.className = "ic-cow-prod" + (p.committed ? " ic-locked" : "");
     const nm = textInput(p.name, p.committed, (v) => { p.name = v; persist(); }); nm.placeholder = "Product name";
     nm.classList.add("ic-cow-pname");
-    const pr = document.createElement("input"); pr.type = "text"; pr.className = "ic-cow-pprice"; pr.placeholder = "$ price";
-    pr.value = p.price === "" || p.price == null ? "" : String(p.price);
+    const pr = document.createElement("input"); pr.type = "text"; pr.className = "ic-cow-pprice"; pr.placeholder = "$0.00";
     pr.disabled = !!p.committed;
-    pr.addEventListener("input", () => { p.price = pr.value.replace(/[^0-9.]/g, ""); persist(); });
+    // Show formatted US currency when not being edited; raw number while editing.
+    pr.value = formatMoney(p.price);
+    pr.addEventListener("focus", () => { if (!pr.disabled) pr.value = (p.price === "" || p.price == null) ? "" : String(p.price); });
+    pr.addEventListener("input", () => {
+      let v = pr.value.replace(/[^0-9.]/g, "");
+      const parts = v.split(".");
+      if (parts.length > 2) v = parts[0] + "." + parts.slice(1).join("");
+      p.price = v; persist();
+    });
+    pr.addEventListener("blur", () => {
+      const n = parseFloat(p.price);
+      if (isNaN(n)) { p.price = ""; pr.value = ""; } else { p.price = String(n); pr.value = formatMoney(p.price); }
+    });
     row.appendChild(nm); row.appendChild(pr);
     if (!p.committed && (loc.products.length > 1)) {
       const rm = document.createElement("button"); rm.type = "button"; rm.className = "ic-cow-rm sm"; rm.textContent = "×"; rm.title = "Remove product";
@@ -208,6 +222,14 @@
       row.appendChild(rm);
     }
     return row;
+  }
+
+  // US currency: 2 decimals + thousands separators. "" for blank/invalid.
+  function formatMoney(v) {
+    if (v === "" || v == null) return "";
+    const n = parseFloat(v);
+    if (isNaN(n)) return "";
+    return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
   // ---- small input helpers ---------------------------------------------------
@@ -293,11 +315,11 @@
     const st = document.createElement("style");
     st.id = "ic-cow-style";
     st.textContent = `
-      .${BTN_MARK}{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;
-        margin-right:7px;vertical-align:middle;border:1px solid #c4b5fd;border-radius:6px;background:#f5f3ff;
-        color:#6d28d9;cursor:pointer;padding:0;flex:none}
-      .${BTN_MARK}:hover{background:#ede9fe;border-color:#a78bfa}
-      .${BTN_MARK} svg{width:14px;height:14px}
+      .${BTN_MARK}{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;
+        margin-right:8px;vertical-align:middle;border:none;background:transparent;cursor:pointer;padding:0;flex:none;
+        opacity:.85;transition:transform .12s ease,opacity .12s ease}
+      .${BTN_MARK}:hover{opacity:1;transform:scale(1.15)}
+      .${BTN_MARK} svg{width:18px;height:18px;display:block}
       #ic-cow-overlay{position:fixed;inset:0;z-index:2147483600;background:rgba(15,23,42,.5);
         display:flex;align-items:center;justify-content:center;
         font:13px/1.45 -apple-system,Segoe UI,Roboto,sans-serif}
