@@ -3,6 +3,15 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.18.8] - 2026-10-20
+### Fixed
+- Quick Change Order wizard: a commit whose takeoff tab was closed before it
+  finished (e.g. no sheet was open) left the job stuck "in progress" and blocked all
+  future commits ("there's already a commit, let it finish"). A stale job is now
+  ignored after 90 seconds, so you can always retry. Also: if no sheet is open, the
+  takeoff status card now tells you to open one instead of hanging, and never leaves
+  the job stuck.
+
 ## [1.18.7] - 2026-10-20
 ### Fixed
 - Quick Change Order wizard: products are now created with a **Product Type** ("PP")

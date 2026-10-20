@@ -117,11 +117,18 @@
 
     status("Preparing to create records…");
     try {
-      // Wait for the bridge (headers + open sheet).
+      // Wait for the bridge (headers + open sheet). If no sheet is open the takeoff
+      // can't place anything, so after a short grace period we ask the user to open
+      // one (rather than hanging). Either way the job ends 'failed', never stuck.
       let st = null;
-      for (let i = 0; i < 60; i++) { st = await bridgeState(); if (st && st.ready && st.sheetId) break; await sleep(1000); }
-      if (!st || !st.ready) throw new Error("Takeoff API not ready (couldn't read the session headers).");
-      if (!st.sheetId) throw new Error("Couldn't determine the open sheet — open a sheet in this takeoff and try again.");
+      for (let i = 0; i < 30; i++) {
+        st = await bridgeState();
+        if (st && st.ready && st.sheetId) break;
+        if (i === 6 && st && st.ready && !st.sheetId) status("Open any sheet in this takeoff (Sheets panel) — the wizard needs an open sheet to place the records…", "");
+        await sleep(1000);
+      }
+      if (!st || !st.ready) throw new Error("the takeoff didn't finish loading (couldn't read the session) — reload the takeoff and commit again.");
+      if (!st.sheetId) throw new Error("no sheet is open in this takeoff — open any sheet (Sheets panel), then commit again.");
       const sheetId = st.sheetId;
 
       const origins = (await q({ $type: "NonBaseBidOriginsListQuery" })) || [];

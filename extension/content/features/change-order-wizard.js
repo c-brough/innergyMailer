@@ -318,7 +318,12 @@
 
     const job = { coId: current.co.id, coName: current.co.name, takeoffId: tid, projectId: current.entry.projectId || projectId(), status: "pending", created: Date.now(), locations };
     loadJobs().then((jobs) => {
-      if (jobs[tid] && jobs[tid].status === "running") { alert("A commit for this project's takeoff is already in progress — let it finish first."); return; }
+      // Block only a commit that's genuinely still running. A "running" job older
+      // than a few minutes is stale (e.g. the takeoff tab was closed mid-commit) —
+      // overwrite it rather than locking the user out forever.
+      const ex = jobs[tid];
+      const fresh = ex && ex.status === "running" && (Date.now() - (ex.created || 0)) < 90000;
+      if (fresh) { alert("A commit for this project's takeoff is already in progress — let it finish first (or wait a couple of minutes and retry)."); return; }
       jobs[tid] = job;
       chrome.storage.local.set({ coCommitJobs: jobs }, () => {
         const w = window.open("https://app.innergy.com/Takeoff/" + tid, "_blank");
