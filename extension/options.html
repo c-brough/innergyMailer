@@ -508,6 +508,30 @@
       </div>
     </details>
 
+    <!-- ===== Quick Change Order wizard =========================== -->
+    <details class="cat" data-cat="co-wizard">
+      <summary>Quick Change Order wizard <span class="cat-tag">on by default</span></summary>
+      <div class="cat-body">
+        <fieldset id="fs-co-wizard">
+          <p class="fs-note">
+            On a project's <strong>Change Orders</strong> grid, adds a wizard button to the
+            left of any change order that is <strong>Pending</strong> with a <strong>$0 grand
+            total cost</strong>. The wizard lets you build up <strong>locations</strong> (name
+            + scope) and the <strong>products</strong> (name + price) within each, then commit
+            them. On by default — turn off to opt out.
+          </p>
+          <p class="fs-note" style="margin-top:6px;color:#7c3aed">
+            <strong>Phase 1:</strong> the wizard UI and local save/lock only — committing does
+            not yet create records in Innergy (that comes in a later update).
+          </p>
+          <label class="opt">
+            <input type="checkbox" id="co-wizard-enabled" />
+            Enable the Quick Change Order wizard
+          </label>
+        </fieldset>
+      </div>
+    </details>
+
     <!-- ===== Notifications sidebar ================================ -->
     <details class="cat" data-cat="notifications">
       <summary>Notifications sidebar <span class="cat-tag">opt-in</span></summary>

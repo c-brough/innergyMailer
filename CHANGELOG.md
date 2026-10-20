@@ -3,6 +3,16 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.17.0] - 2026-10-19
+### Added
+- **Quick Change Order wizard — Phase 1** (on by default; opt out in Options). On a
+  project's **Change Orders** grid, a wizard button now appears to the left of any
+  change order that is **Pending** with a **$0 grand total cost**. It opens a wizard
+  to build **locations** (name + scope) and the **products** (name + price) within
+  each, then **Commit & lock** them. This phase is UI + local save/lock only —
+  committing does not yet create records in Innergy (that, and the automatic
+  takeoff recalculation, come in the next updates).
+
 ## [1.16.2] - 2026-10-19
 ### Changed
 - Note drafts now **show images** in the preview. Images you paste into a note are
