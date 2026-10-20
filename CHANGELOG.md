@@ -3,6 +3,13 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.17.1] - 2026-10-19
+### Fixed
+- Quick Change Order wizard button didn't appear: reading the DevExtreme grid
+  needs the page's own jQuery, which an isolated content script can't see. A
+  MAIN-world helper now tags the qualifying change-order cells and the wizard
+  injects its button onto those tags (same pattern as the other grid readers).
+
 ## [1.17.0] - 2026-10-19
 ### Added
 - **Quick Change Order wizard — Phase 1** (on by default; opt out in Options). On a

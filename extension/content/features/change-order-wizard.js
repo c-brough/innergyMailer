@@ -58,55 +58,22 @@
     return m ? m[1] : null;
   }
 
-  // ---- the change-orders grid (DevExtreme, via jQuery) -----------------------
-  // The dxDataGrid instance is attached (via jQuery data) to the widget-root
-  // `.dx-widget` div, not the inner `.dx-datagrid`. Scan widget roots and pick
-  // the one whose data source holds change-order records.
-  function findGrid() {
-    const $ = window.jQuery;
-    if (!$) return null;
-    let grid = null;
-    $(".dx-widget").each(function () {
-      if (grid) return;
-      const data = $(this).data();
-      if (!data) return;
-      for (const k in data) {
-        const inst = data[k];
-        if (inst && typeof inst.getVisibleRows === "function" && typeof inst.getCellElement === "function" && typeof inst.getDataSource === "function") {
-          try {
-            const items = inst.getDataSource().items();
-            if (items && items[0] && "GrandTotalCost" in items[0] && "Status" in items[0]) { grid = inst; return; }
-          } catch (e) { /* not this one */ }
-        }
-      }
-    });
-    return grid;
-  }
-
-  function qualifies(data) {
-    return data && data.Status === "Pending" && data.GrandTotalCost && data.GrandTotalCost.Value === 0;
-  }
-  function coInfo(data) {
-    const n = data.Name || {};
-    return { id: n.ObjectId || null, name: n.DisplayName || n.Title || "Change Order" };
-  }
-
   // ---- button injection ------------------------------------------------------
+  // We can't read the page's DevExtreme grid from this isolated world, so the
+  // MAIN-world companion (change-order-wizard-main.js) tags each qualifying Name
+  // cell with data-ic-co-id / data-ic-co-name. We just consume those tags here.
   function injectButtons() {
     if (!enabled || !onCOPage()) return;
-    const grid = findGrid();
-    if (!grid) return;
-    let rows;
-    try { rows = grid.getVisibleRows(); } catch (e) { return; }
-    for (const r of rows || []) {
-      if (!r || r.rowType !== "data" || !qualifies(r.data)) continue;
-      const co = coInfo(r.data);
+    for (const td of document.querySelectorAll("td[data-ic-co-id]")) {
+      if (td.querySelector("." + BTN_MARK)) continue;
+      const co = { id: td.getAttribute("data-ic-co-id"), name: td.getAttribute("data-ic-co-name") || "Change Order" };
       if (!co.id) continue;
-      let cell;
-      try { cell = grid.getCellElement(r.rowIndex, "Name"); } catch (e) { cell = null; }
-      const td = cell && (cell.length ? cell[0] : cell);
-      if (!td || td.querySelector("." + BTN_MARK)) continue;
       td.insertBefore(makeButton(co), td.firstChild);
+    }
+    // Drop buttons whose cell is no longer tagged (row de-qualified or re-rendered).
+    for (const b of document.querySelectorAll("." + BTN_MARK)) {
+      const td = b.closest("td");
+      if (!td || !td.hasAttribute("data-ic-co-id")) b.remove();
     }
   }
 
@@ -374,13 +341,22 @@
     (document.head || document.documentElement).appendChild(st);
   }
 
-  // ---- debounced mount -------------------------------------------------------
+  // ---- debounced mount + poll ------------------------------------------------
+  // The MAIN-world tagger marks cells via attributes, which the bootstrap
+  // observer (childList only) doesn't see — so we also poll briefly while on the
+  // Change Orders page to pick up newly-tagged rows.
   let evalTimer = null;
   function scheduleEval() {
     if (evalTimer) return;
     evalTimer = setTimeout(() => { evalTimer = null; try { injectButtons(); } catch (e) { IC.warn("co-wizard", e); } }, EVAL_DEBOUNCE_MS);
   }
+  let pollStarted = false;
+  function startPoll() {
+    if (pollStarted) return;
+    pollStarted = true;
+    setInterval(() => { if (enabled && onCOPage()) try { injectButtons(); } catch (e) { /* ignore */ } }, 1000);
+  }
   window.addEventListener("hashchange", () => { if (!onCOPage()) teardown(); scheduleEval(); });
 
-  IC.registerFeature({ id: "change-order-wizard", mount: scheduleEval });
+  IC.registerFeature({ id: "change-order-wizard", mount: () => { startPoll(); scheduleEval(); } });
 })();
