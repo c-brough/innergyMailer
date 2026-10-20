@@ -3,6 +3,15 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.18.5] - 2026-10-20
+### Fixed
+- Quick Change Order wizard: re-committing after a failed attempt could stack
+  duplicate copies of the same location, making the product fail with "Product
+  intersects multiple Locations." The wizard now tracks the locations it creates and,
+  on a retry, deletes and recreates its own leftover location cleanly — while never
+  touching a real location that happens to share the name (it asks you to rename
+  instead). Verified the full create chain end to end.
+
 ## [1.18.4] - 2026-10-20
 ### Fixed
 - Quick Change Order wizard commit failed with "r is not defined" — a variable

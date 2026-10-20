@@ -124,22 +124,40 @@
       const costLayer = (layers.find((l) => l.type === 4 && l.bidOriginId === origin.id) || {}).layerId;
       if (!locLayer || !costLayer) throw new Error("Couldn't resolve the takeoff layers.");
 
+      // Wizard-created location def ids per takeoff — so a retry can delete-and-
+      // recreate ITS OWN leftover location (clearing any stacked placements)
+      // without ever touching a real location that happens to share the name.
+      const tracked = (await get("coWizardCreatedLocs")) || {};
+      const trackedList = tracked[tid] || (tracked[tid] = []);
+      const saveTracked = async () => { tracked[tid] = trackedList; await set({ coWizardCreatedLocs: tracked }); };
+
       let created = 0;
       for (let li = 0; li < job.locations.length; li++) {
         const loc = job.locations[li];
         if (loc.done) continue;
         status('Creating location "' + loc.name + '"…');
-        // Definition — reuse an existing same-named one (e.g. an orphan left by a
-        // prior failed attempt) rather than failing on the duplicate-name check.
         if (!loc._defId) {
+          const mkDef = (id) => ({ id, takeoffId: tid, projectId: null, number: "", name: loc.name, building: "", floor: "", zone: "", fill: "rgba(163,73,164,1)", scopeNote: loc.scope || "", scopeNoteLexicalJson: null, internalNotes: "", internalNotesLexicalJson: null, fontSize: 12, fontColor: "rgba(0,0,0,1)", $type: "LocationDefinitionCreateCommand" });
           const newId = uuid();
-          const r = await cmd({ id: newId, takeoffId: tid, projectId: null, number: "", name: loc.name, building: "", floor: "", zone: "", fill: "rgba(163,73,164,1)", scopeNote: loc.scope || "", scopeNoteLexicalJson: null, internalNotes: "", internalNotesLexicalJson: null, fontSize: 12, fontColor: "rgba(0,0,0,1)", $type: "LocationDefinitionCreateCommand" });
-          if (ok(r)) loc._defId = newId;
+          let r = await cmd(mkDef(newId));
+          if (ok(r)) { loc._defId = newId; trackedList.push(newId); }
           else if (/already exists/i.test(desc(r) || "")) {
             const existing = await findExistingLoc(tid, loc.name);
             if (!existing) throw new Error("location definition — " + desc(r));
-            loc._defId = existing.id;
+            if (trackedList.includes(existing.id)) {
+              // Our own orphan from a prior failed attempt — remove it (clears any
+              // stacked placements) and recreate cleanly.
+              await cmd({ id: existing.id, takeoffId: tid, $type: "LocationDefinitionRemoveCommand" });
+              const i = trackedList.indexOf(existing.id); if (i >= 0) trackedList.splice(i, 1);
+              const freshId = uuid();
+              r = await cmd(mkDef(freshId));
+              if (!ok(r)) throw new Error("location definition — " + desc(r));
+              loc._defId = freshId; loc._placed = false; trackedList.push(freshId);
+            } else {
+              throw new Error('A location named "' + loc.name + '" already exists in this takeoff — rename it in the wizard (or delete the existing one) and commit again.');
+            }
           } else throw new Error("location definition — " + desc(r));
+          await saveTracked();
           jobs[tid] = job; await set({ coCommitJobs: jobs });
         }
         // Placement.
