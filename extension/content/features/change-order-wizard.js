@@ -147,11 +147,11 @@
       '</div>';
     card.querySelector(".ic-cow-ttl h2").textContent = co.name;
     card.querySelector(".ic-cow-note").textContent =
-      "Build the locations and products for this change order. Phase 1: Commit locks them here; pushing to Innergy comes next.";
+      "Build the locations and products for this change order, then Commit — it opens the Takeoff and creates them there. Afterward, click Recalculate in the takeoff to update the CO total.";
     overlay.appendChild(card);
     document.body.appendChild(overlay);
 
-    current = { co, entry, body: card.querySelector(".ic-cow-body"), statusEl: card.querySelector(".ic-cow-status") };
+    current = { co, entry, body: card.querySelector(".ic-cow-body"), statusEl: card.querySelector(".ic-cow-status"), noteEl: card.querySelector(".ic-cow-note") };
     card.querySelector(".ic-cow-x").addEventListener("click", closeWizard);
     card.querySelector(".ic-cow-addloc").addEventListener("click", () => { entry.locations.push(blankLocation()); renderBody(); persist(); });
     card.querySelector(".ic-cow-commit").addEventListener("click", commitAll);
@@ -279,9 +279,18 @@
       (locs || prods ? locs + " new location" + (locs === 1 ? "" : "s") + ", " + prods + " product" + (prods === 1 ? "" : "s") + " ready" : "nothing to commit yet");
   }
 
+  function loadJobs() {
+    return new Promise((res) => { try { chrome.storage.local.get("coCommitJobs", (d) => res((d && d.coCommitJobs) || {})); } catch (e) { res({}); } });
+  }
+  function commitNote(msg, tone) {
+    if (!current || !current.noteEl) return;
+    current.noteEl.textContent = msg;
+    current.noteEl.style.color = tone === "err" ? "#b91c1c" : tone === "ok" ? "#15803d" : "#7c3aed";
+  }
+
   function commitAll() {
     if (!current) return;
-    // Phase 1: validate, then lock locally (no Innergy write yet).
+    // Validate the uncommitted items.
     const problems = [];
     current.entry.locations.forEach((loc, li) => {
       if (loc.committed) return;
@@ -292,14 +301,48 @@
       });
     });
     if (problems.length) { alert("Please fix:\n\n• " + problems.join("\n• ")); return; }
-    for (const loc of current.entry.locations) {
-      if ((loc.name || "").trim()) loc.committed = true;
-      loc.products = (loc.products || []).filter((p) => (p.name || "").trim());
-      for (const p of loc.products) p.committed = true;
-    }
-    current.entry.updated = Date.now();
-    saveCO(current.co.id, current.entry).then(() => { renderBody(); updateStatus(); });
+
+    const tid = current.entry.takeoffId || takeoffId();
+    if (!tid) { alert("Couldn't find this project's Takeoff link on the page, so there's nowhere to push the records. Open the project's Takeoff once, then reopen this wizard."); return; }
+
+    // Build the commit job from new (uncommitted), named items.
+    const locations = current.entry.locations
+      .filter((l) => !l.committed && (l.name || "").trim())
+      .map((l) => ({
+        name: (l.name || "").trim(), scope: (l.scope || "").trim(), done: false,
+        products: (l.products || []).filter((p) => !p.committed && (p.name || "").trim())
+          .map((p) => ({ name: (p.name || "").trim(), price: parseFloat(p.price) || 0, done: false })),
+      }));
+    if (!locations.length) { alert("Nothing new to commit."); return; }
+
+    const job = { coId: current.co.id, coName: current.co.name, takeoffId: tid, projectId: current.entry.projectId || projectId(), status: "pending", created: Date.now(), locations };
+    loadJobs().then((jobs) => {
+      if (jobs[tid] && jobs[tid].status === "running") { alert("A commit for this project's takeoff is already in progress — let it finish first."); return; }
+      jobs[tid] = job;
+      chrome.storage.local.set({ coCommitJobs: jobs }, () => {
+        const w = window.open("https://app.innergy.com/Takeoff/" + tid, "_blank");
+        commitNote(w ? "Creating records in the takeoff tab that just opened — keep it open until it reports done, then recalculate." : "Open the takeoff to finish (popup was blocked): /Takeoff/" + tid, "");
+      });
+    });
   }
+
+  // Reflect commit progress from the takeoff tab (it writes back to coWizard / coCommitJobs).
+  chrome.storage.onChanged.addListener((c, area) => {
+    if (area !== "local" || !current) return;
+    if (c.coWizard && c.coWizard.newValue) {
+      const e = c.coWizard.newValue[current.co.id];
+      if (e) {
+        current.entry = e;
+        if (!current.entry.locations || !current.entry.locations.length) current.entry.locations = [blankLocation()];
+        renderBody(); updateStatus();
+        if (e.pushed) commitNote("Committed to Innergy. Now click “Recalculate direct costs and labor” in the takeoff to update this CO's total.", "ok");
+      }
+    }
+    if (c.coCommitJobs && c.coCommitJobs.newValue) {
+      const j = c.coCommitJobs.newValue[current.entry.takeoffId || takeoffId()];
+      if (j && j.status === "failed") commitNote("Commit didn't finish: " + (j.error || "unknown error") + ". Your entries are kept — you can retry.", "err");
+    }
+  });
 
   function closeWizard() { const o = document.getElementById("ic-cow-overlay"); if (o) o.remove(); current = null; }
 

@@ -1,0 +1,207 @@
+/* InnerCider — Quick Change Order wizard: takeoff-page orchestrator (Phase 2)
+ *
+ * Runs on a /Takeoff/<takeoffId> page. When the CO-page wizard commits, it stores
+ * a job in chrome.storage (`coCommitJobs[takeoffId]`) and opens the takeoff. This
+ * script picks up that job and creates the real records via the Takeoff API —
+ * through the MAIN-world bridge (change-order-wizard-takeoff-main.js), which holds
+ * the captured headers and open sheetId.
+ *
+ * Per the verified recipe (see innergy-changeorder-takeoff-api memory):
+ *   • resolve ids: origin by name, location layer (type 2), cost layer (type 4 for
+ *     this origin), sheetId (from the bridge);
+ *   • per location: LocationDefinitionCreate + LocationCreate (synthetic rect);
+ *   • per product: attach → read props → EditCommonProperties (name, dims x/y/z=1,
+ *     taxRegulationsType 5 so it's ready to draw) → price → CostObjectCreate
+ *     (rect inside the location rect, activeBidOriginId = origin).
+ * On success it marks the CO's wizard items committed (coWizard) and removes the
+ * job. It does NOT recalc yet — the CO total updates after the takeoff recalc
+ * (Phase 3); a note tells the user. No geometry drawing is required.
+ */
+
+(() => {
+  "use strict";
+
+  const IC = window.InnerCider;
+  const TK_RE = /\/Takeoff\/([0-9a-fA-F-]{36})/;
+  const FONT = "'Trebuchet MS', 'Lucida Sans Unicode', 'Lucida Grande', 'Lucida Sans', Arial, sans-serif";
+
+  function takeoffId() { const m = location.pathname.match(TK_RE); return m ? m[1] : null; }
+
+  // ---- bridge to MAIN world --------------------------------------------------
+  const pending = new Map();
+  let seq = 0;
+  window.addEventListener("message", (ev) => {
+    if (ev.source !== window) return;
+    const m = ev.data;
+    if (!m || m.source !== "ic-cow-main") return;
+    const cb = pending.get(m.requestId);
+    if (cb) { pending.delete(m.requestId); cb(m); }
+  });
+  function bridge(type, extra, timeout) {
+    return new Promise((res) => {
+      const requestId = "r" + (++seq);
+      pending.set(requestId, res);
+      window.postMessage(Object.assign({ source: "ic-cow", type, requestId }, extra), location.origin);
+      setTimeout(() => { if (pending.has(requestId)) { pending.delete(requestId); res({ timeout: true }); } }, timeout || 25000);
+    });
+  }
+  const bridgeState = () => bridge("STATE", {}, 5000);
+  const q = (body) => bridge("RUN", { kind: "query", body }).then((r) => (r && r.ok ? r.data : null));
+  const cmd = (body) => bridge("RUN", { kind: "command", body });
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => { const r = Math.random() * 16 | 0; return (c === "x" ? r : (r & 0x3 | 0x8)).toString(16); }));
+  const norm = (s) => String(s || "").replace(/\s+/g, " ").trim().toLowerCase();
+  const ok = (r) => r && r.ok && r.data && r.data.outcomeType === 0;
+  const desc = (r) => (r && r.data && r.data.outcomeDescription) || (r && r.error) || (r && r.timeout ? "timed out" : "failed");
+  const money = (v) => ({ value: Number(v) || 0, currencyCode: "USD", $type: "m" });
+
+  // ---- storage helpers -------------------------------------------------------
+  const get = (key) => new Promise((res) => { try { chrome.storage.local.get(key, (d) => res(d ? d[key] : undefined)); } catch (e) { res(undefined); } });
+  const set = (obj) => new Promise((res) => { try { chrome.storage.local.set(obj, res); } catch (e) { res(); } });
+
+  // ---- geometry (synthetic rectangles on the open sheet) ---------------------
+  function locRect(i) { const y0 = 120 + i * 150; return [100, y0, 240, y0 + 120]; }
+  function prodRect(i, j) { const lx = 100, ly = 120 + i * 150; const x0 = lx + 12 + (j % 3) * 42, y0 = ly + 12 + Math.floor(j / 3) * 34; return [x0, y0, x0 + 30, y0 + 28]; }
+  function points(r) { return [[r[0], r[1]], [r[2], r[1]], [r[2], r[3]], [r[0], r[3]]].map(([x, y]) => ({ x, y, order: 0, $type: "PointDto" })); }
+  function shape(rect, layerId, sheetId, isLoc) {
+    return {
+      id: uuid(), type: isLoc ? 1 : 11, spriteType: isLoc ? 0 : 2, points: points(rect),
+      fill: isLoc ? "rgba(163, 73, 164, 1)" : "rgba(0, 0, 0, 1)", stroke: isLoc ? "rgba(163, 73, 164, 1)" : "rgba(0, 0, 0, 1)",
+      strokeThickness: isLoc ? 1 : 2, strokeStyle: 0, text: null, fontSize: 12,
+      fontColor: isLoc ? "rgba(0, 0, 0, 1)" : "rgba(255, 255, 255, 1)", fontFamily: FONT,
+      hasLabel: false, labelText: "", labelType: null, hasBorder: true, sheetId, layerId,
+      knownLengthInInches: null, overriddenDistanceInInches: null, textOverrideTemplate: null,
+      lineConfig: { lineType: 0, $type: "SolidLineConfigDto" },
+      applyLayerOpacityToFill: true, applyLayerOpacityToStroke: true, scale: isLoc ? null : 50, name: null, $type: "ShapeDto",
+    };
+  }
+
+  // ---- orchestration ---------------------------------------------------------
+  let running = false;
+  async function orchestrate() {
+    const tid = takeoffId();
+    if (!tid || running) return;
+    const jobs = (await get("coCommitJobs")) || {};
+    const job = jobs[tid];
+    if (!job || job.status !== "pending") return;
+    running = true;
+    job.status = "running";
+    jobs[tid] = job; await set({ coCommitJobs: jobs });
+
+    status("Preparing to create records…");
+    try {
+      // Wait for the bridge (headers + open sheet).
+      let st = null;
+      for (let i = 0; i < 60; i++) { st = await bridgeState(); if (st && st.ready && st.sheetId) break; await sleep(1000); }
+      if (!st || !st.ready) throw new Error("Takeoff API not ready (couldn't read the session headers).");
+      if (!st.sheetId) throw new Error("Couldn't determine the open sheet — open a sheet in this takeoff and try again.");
+      const sheetId = st.sheetId;
+
+      const origins = (await q({ $type: "NonBaseBidOriginsListQuery" })) || [];
+      const origin = origins.find((o) => norm(o.displayName) === norm(job.coName));
+      if (!origin) throw new Error('Could not find the change order "' + job.coName + '" in this takeoff.');
+
+      const layers = (await q({ workOrderId: tid, $type: "TakeoffLayersQuery" })) || [];
+      const locLayer = (layers.find((l) => l.type === 2) || {}).layerId;
+      const costLayer = (layers.find((l) => l.type === 4 && l.bidOriginId === origin.id) || {}).layerId;
+      if (!locLayer || !costLayer) throw new Error("Couldn't resolve the takeoff layers.");
+
+      let created = 0;
+      for (let li = 0; li < job.locations.length; li++) {
+        const loc = job.locations[li];
+        if (loc.done) continue;
+        status('Creating location "' + loc.name + '"…');
+        const locDefId = uuid();
+        let r = await cmd({ id: locDefId, takeoffId: tid, projectId: null, number: "", name: loc.name, building: "", floor: "", zone: "", fill: "rgba(163,73,164,1)", scopeNote: loc.scope || "", scopeNoteLexicalJson: null, internalNotes: "", internalNotesLexicalJson: null, fontSize: 12, fontColor: "rgba(0,0,0,1)", $type: "LocationDefinitionCreateCommand" });
+        if (!ok(r)) throw new Error("location definition — " + desc(r));
+        r = await cmd({ id: uuid(), takeoffId: tid, sheetType: 0, locationDefinitionId: locDefId, aiRecognizedLocation: null, representation: shape(locRect(li), locLayer, sheetId, true), $type: "LocationCreateCommand" });
+        if (!ok(r)) throw new Error("placing location — " + desc(r));
+
+        for (let pj = 0; pj < loc.products.length; pj++) {
+          const p = loc.products[pj];
+          if (p.done) continue;
+          status('Adding product "' + p.name + '"…');
+          const apId = uuid();
+          r = await cmd({ takeoffId: tid, attachedProductId: apId, $type: "ProductsPaletteAttachCustomProductCommand" });
+          if (!ok(r)) throw new Error("creating product — " + desc(r));
+          const pd = (await q({ takeoffId: tid, attachedProductId: apId, $type: "ProductsPaletteAttachedProductQuery" })) || {};
+          const dims = { count: (pd.dimensions && pd.dimensions.count) || 3, x: 1, x_Description: null, xEditable: true, y: 1, y_Description: null, yEditable: true, z: 1, z_Description: null, zEditable: true };
+          r = await cmd({ id: apId, takeoffId: tid, fill: pd.fill || "rgba(0,0,0,1)", strokeThickness: pd.strokeThickness != null ? pd.strokeThickness : 2, userInputProductName: p.name, defaultShapeRepresentation: pd.defaultShapeRepresentation, eachProductWidthCalculationMethod: pd.eachProductWidthCalculationMethod, dimensions: dims, facilityLaborCategoryId: pd.facilityLaborCategoryId, taxRegulationsType: 5, spriteType: pd.spriteType, takeoffMethod: pd.takeoffMethod, type: pd.type, description: null, $type: "AttachedProductEditCommonPropertiesCommand" });
+          if (!ok(r)) throw new Error("naming product — " + desc(r));
+          r = await cmd({ attachedProductId: apId, takeoffId: tid, desiredUnitDraftingPreSellTaxPrice: money(0), desiredUnitFabricationPreSellTaxPrice: money(p.price), desiredUnitInstallPreSellTaxPrice: money(0), $type: "AttachedProductAddDesiredUnitPreSellTaxPricesCommand" });
+          if (!ok(r)) throw new Error("pricing product — " + desc(r));
+          r = await cmd({ id: uuid(), takeoffId: tid, sheetType: 0, attachedProductId: apId, activeBidOriginId: origin.id, representation: shape(prodRect(li, pj), costLayer, sheetId, false), $type: "CostObjectCreateCommand" });
+          if (!ok(r)) throw new Error("placing product — " + desc(r));
+          p.done = true; created++;
+        }
+        loc.done = true;
+        jobs[tid] = job; await set({ coCommitJobs: jobs }); // checkpoint
+      }
+
+      await markCommitted(job);
+      delete jobs[tid]; await set({ coCommitJobs: jobs });
+      status("Done — created " + created + " product" + (created === 1 ? "" : "s") + " for “" + job.coName + "”. Click “Recalculate direct costs and labor” to update the change-order total.", "ok");
+    } catch (e) {
+      job.status = "failed"; job.error = String(e && e.message || e);
+      jobs[tid] = job; await set({ coCommitJobs: jobs });
+      status("Couldn't finish: " + job.error, "err");
+    } finally {
+      running = false;
+    }
+  }
+
+  // Mark the CO's wizard items committed so the CO-page wizard shows them locked.
+  async function markCommitted(job) {
+    const all = (await get("coWizard")) || {};
+    const entry = all[job.coId];
+    if (!entry) return;
+    for (const loc of entry.locations || []) {
+      if ((loc.name || "").trim()) loc.committed = true;
+      loc.products = (loc.products || []).filter((p) => (p.name || "").trim());
+      for (const p of loc.products) p.committed = true;
+    }
+    entry.pushed = true; entry.updated = Date.now();
+    all[job.coId] = entry; await set({ coWizard: all });
+  }
+
+  // ---- status card -----------------------------------------------------------
+  function ensureStyle() {
+    if (document.getElementById("ic-cowt-style")) return;
+    const st = document.createElement("style");
+    st.id = "ic-cowt-style";
+    st.textContent = `
+      #ic-cowt{position:fixed;right:20px;bottom:20px;z-index:2147483600;max-width:360px;background:#fff;color:#1f2937;
+        border:1px solid #e5e7eb;border-left:4px solid #7c3aed;border-radius:10px;box-shadow:0 10px 34px rgba(0,0,0,.22);
+        padding:12px 14px;font:13px/1.4 -apple-system,Segoe UI,Roboto,sans-serif}
+      #ic-cowt.ok{border-left-color:#16a34a}
+      #ic-cowt.err{border-left-color:#dc2626}
+      #ic-cowt .h{font-weight:700;margin-bottom:3px;display:flex;align-items:center;gap:8px}
+      #ic-cowt .h b{flex:1}
+      #ic-cowt .x{cursor:pointer;border:none;background:#f3f4f6;width:22px;height:22px;border-radius:6px;font-size:14px;color:#374151}
+      #ic-cowt .msg{color:#334155}
+      #ic-cowt .spin{width:13px;height:13px;border:2px solid #ddd6fe;border-top-color:#7c3aed;border-radius:50%;animation:iccowtSpin .7s linear infinite}
+      @keyframes iccowtSpin{to{transform:rotate(360deg)}}`;
+    (document.head || document.documentElement).appendChild(st);
+  }
+  function status(msg, kind) {
+    ensureStyle();
+    let el = document.getElementById("ic-cowt");
+    if (!el) { el = document.createElement("div"); el.id = "ic-cowt"; document.body.appendChild(el); }
+    el.className = kind || "";
+    const spinner = kind ? "" : '<span class="spin"></span>';
+    el.innerHTML = '<div class="h">' + spinner + "<b>Quick Change Order</b><button class='x' title='Dismiss'>×</button></div><div class='msg'></div>";
+    el.querySelector(".msg").textContent = msg;
+    el.querySelector(".x").addEventListener("click", () => el.remove());
+  }
+
+  // ---- kick off --------------------------------------------------------------
+  let scheduled = false;
+  function schedule() {
+    if (scheduled || !takeoffId()) return;
+    scheduled = true;
+    setTimeout(() => { scheduled = false; orchestrate().catch((e) => IC.warn("co-wizard-takeoff", e)); }, 1200);
+  }
+  chrome.storage.onChanged.addListener((c, area) => { if (area === "local" && c.coCommitJobs) schedule(); });
+  IC.registerFeature({ id: "co-wizard-takeoff", mount: schedule });
+})();

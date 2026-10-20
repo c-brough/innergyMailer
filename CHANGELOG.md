@@ -3,6 +3,19 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.18.0] - 2026-10-19
+### Added
+- **Quick Change Order wizard — Phase 2: commit creates the records.** Committing
+  now opens the project's Takeoff and creates each location (name + scope) and
+  product (name + price) there via the Takeoff API — headless, no sheet drawing. It
+  maps your product price to the **Fixed Price · Unit Fabrication Pre-Sell-Tax
+  Price**, places everything under the change order's origin, and marks the items
+  locked when done. A status card in the takeoff shows progress. After it finishes,
+  click **Recalculate direct costs and labor** in the takeoff to roll the pricing
+  into the CO total (auto-recalc is the next phase). Implemented with a MAIN-world
+  bridge (reuses the takeoff session's own request headers) + an isolated
+  orchestrator that runs the verified command sequence.
+
 ## [1.17.4] - 2026-10-19
 ### Changed
 - Quick Change Order wizard: the open icon is now a **form being auto-filled with a
