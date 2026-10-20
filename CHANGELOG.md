@@ -3,6 +3,15 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.17.4] - 2026-10-19
+### Changed
+- Quick Change Order wizard: the open icon is now a **form being auto-filled with a
+  magic sparkle** (clearer that it fills out the change order) instead of a wand.
+### Fixed
+- The larger icon was stretching the grid row taller (looked glitchy). Sized the
+  icon box to the row's line height (18px, `line-height:0`) so it no longer grows
+  the row.
+
 ## [1.17.3] - 2026-10-19
 ### Changed
 - Quick Change Order wizard: made the wand icon **bolder and more obviously a magic

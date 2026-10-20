@@ -88,13 +88,13 @@
     return b;
   }
 
-  // A bold black magician's wand with a big sparkle-star at the tip.
+  // A form/document being auto-filled, with a magic sparkle.
   const WAND_SVG =
     '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
-    '<path d="M3.5 20.5 13 11" stroke="#0a0a0a" stroke-width="3.2" stroke-linecap="round"/>' +
-    '<path d="M16.5 1.5 18.4 6.1 23 8 18.4 9.9 16.5 14.5 14.6 9.9 10 8 14.6 6.1Z" fill="#0a0a0a"/>' +
-    '<path d="M7 3 7.7 4.8 9.5 5.5 7.7 6.2 7 8 6.3 6.2 4.5 5.5 6.3 4.8Z" fill="#0a0a0a"/>' +
-    '<path d="M21 13.5 21.5 14.9 23 15.5 21.5 16.1 21 17.5 20.5 16.1 19 15.5 20.5 14.9Z" fill="#0a0a0a"/></svg>';
+    '<rect x="3" y="5.2" width="11" height="14.6" rx="1.8" stroke="#0a0a0a" stroke-width="1.7"/>' +
+    '<path d="M6 9.4H11M6 12.6H11.3M6 15.8H9.4" stroke="#0a0a0a" stroke-width="1.6" stroke-linecap="round"/>' +
+    '<path d="M17.3 1 18.7 4.8 22.6 6.2 18.7 7.6 17.3 11.4 15.9 7.6 12 6.2 15.9 4.8Z" fill="#0a0a0a" stroke="#fff" stroke-width="0.8" stroke-linejoin="round"/>' +
+    '<path d="M20.8 9.4 21.4 10.9 22.9 11.5 21.4 12.1 20.8 13.6 20.2 12.1 18.7 11.5 20.2 10.9Z" fill="#0a0a0a"/></svg>';
 
   // ---- storage ---------------------------------------------------------------
   function loadAll() {
@@ -315,11 +315,11 @@
     const st = document.createElement("style");
     st.id = "ic-cow-style";
     st.textContent = `
-      .${BTN_MARK}{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;
-        margin-right:8px;vertical-align:middle;border:none;background:transparent;cursor:pointer;padding:0;flex:none;
-        transition:transform .12s ease}
-      .${BTN_MARK}:hover{transform:scale(1.15)}
-      .${BTN_MARK} svg{width:22px;height:22px;display:block}
+      .${BTN_MARK}{display:inline-flex;align-items:center;justify-content:center;width:22px;height:18px;
+        margin:0 6px 0 0;vertical-align:middle;line-height:0;border:none;background:transparent;cursor:pointer;
+        padding:0;flex:none;transition:transform .12s ease}
+      .${BTN_MARK}:hover{transform:scale(1.18)}
+      .${BTN_MARK} svg{width:18px;height:18px;display:block}
       #ic-cow-overlay{position:fixed;inset:0;z-index:2147483600;background:rgba(15,23,42,.5);
         display:flex;align-items:center;justify-content:center;
         font:13px/1.45 -apple-system,Segoe UI,Roboto,sans-serif}
