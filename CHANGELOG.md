@@ -3,6 +3,14 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.18.6] - 2026-10-20
+### Fixed
+- Quick Change Order wizard: product names, like location names, must be unique in a
+  takeoff — a leftover product from a failed attempt made retries fail with "User
+  Input Name has to be unique." The wizard now tracks the products it creates and, on
+  a retry, removes and recreates its own leftover product (never a real one — it asks
+  you to rename instead).
+
 ## [1.18.5] - 2026-10-20
 ### Fixed
 - Quick Change Order wizard: re-committing after a failed attempt could stack
