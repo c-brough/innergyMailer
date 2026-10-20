@@ -3,6 +3,12 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.17.3] - 2026-10-19
+### Changed
+- Quick Change Order wizard: made the wand icon **bolder and more obviously a magic
+  wand** — thicker handle, a big chunky sparkle-star at the tip plus two smaller
+  sparkles, full black at 22px.
+
 ## [1.17.2] - 2026-10-19
 ### Changed
 - Quick Change Order wizard: the open button is now a **black magician's wand with
