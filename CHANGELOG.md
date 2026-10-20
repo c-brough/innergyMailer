@@ -3,6 +3,13 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.18.1] - 2026-10-19
+### Fixed
+- Quick Change Order wizard: typing in a location/product field lost focus every
+  1–2 seconds. The commit-progress storage listener was re-rendering the panel on
+  each keystroke-triggered autosave; it now re-renders only when the committed state
+  actually changes (a real commit), so typing is uninterrupted.
+
 ## [1.18.0] - 2026-10-19
 ### Added
 - **Quick Change Order wizard — Phase 2: commit creates the records.** Committing

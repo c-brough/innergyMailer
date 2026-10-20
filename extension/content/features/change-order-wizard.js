@@ -152,6 +152,7 @@
     document.body.appendChild(overlay);
 
     current = { co, entry, body: card.querySelector(".ic-cow-body"), statusEl: card.querySelector(".ic-cow-status"), noteEl: card.querySelector(".ic-cow-note") };
+    current._lastSig = committedSig(entry);
     card.querySelector(".ic-cow-x").addEventListener("click", closeWizard);
     card.querySelector(".ic-cow-addloc").addEventListener("click", () => { entry.locations.push(blankLocation()); renderBody(); persist(); });
     card.querySelector(".ic-cow-commit").addEventListener("click", commitAll);
@@ -326,16 +327,29 @@
     });
   }
 
+  // A fingerprint of the *committed* state only — unchanged by live typing, so we
+  // can ignore our own per-keystroke saves and re-render only when the takeoff tab
+  // actually locks items (otherwise re-rendering mid-type steals input focus).
+  function committedSig(e) {
+    let n = e && e.pushed ? 1 : 0;
+    for (const l of (e && e.locations) || []) { if (l.committed) n += 1000; for (const p of l.products || []) if (p.committed) n += 1; }
+    return n;
+  }
+
   // Reflect commit progress from the takeoff tab (it writes back to coWizard / coCommitJobs).
   chrome.storage.onChanged.addListener((c, area) => {
     if (area !== "local" || !current) return;
     if (c.coWizard && c.coWizard.newValue) {
       const e = c.coWizard.newValue[current.co.id];
       if (e) {
-        current.entry = e;
-        if (!current.entry.locations || !current.entry.locations.length) current.entry.locations = [blankLocation()];
-        renderBody(); updateStatus();
-        if (e.pushed) commitNote("Committed to Innergy. Now click “Recalculate direct costs and labor” in the takeoff to update this CO's total.", "ok");
+        const sig = committedSig(e);
+        if (sig !== current._lastSig) { // a real commit happened — not our own typing
+          current._lastSig = sig;
+          current.entry = e;
+          if (!current.entry.locations || !current.entry.locations.length) current.entry.locations = [blankLocation()];
+          renderBody(); updateStatus();
+          if (e.pushed) commitNote("Committed to Innergy. Now click “Recalculate direct costs and labor” in the takeoff to update this CO's total.", "ok");
+        }
       }
     }
     if (c.coCommitJobs && c.coCommitJobs.newValue) {
