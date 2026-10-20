@@ -3,6 +3,12 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.18.7] - 2026-10-20
+### Fixed
+- Quick Change Order wizard: products are now created with a **Product Type** ("PP")
+  set — a required field real products carry. Without it the product rendered but
+  showed blank in the takeoff's Budget → Products grid.
+
 ## [1.18.6] - 2026-10-20
 ### Fixed
 - Quick Change Order wizard: product names, like location names, must be unique in a

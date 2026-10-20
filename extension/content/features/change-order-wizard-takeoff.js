@@ -189,7 +189,10 @@
           trackedProds.push(apId); await saveTrackedProds();
           const pd = (await q({ takeoffId: tid, attachedProductId: apId, $type: "ProductsPaletteAttachedProductQuery" })) || {};
           const dims = { count: (pd.dimensions && pd.dimensions.count) || 3, x: 1, x_Description: null, xEditable: true, y: 1, y_Description: null, yEditable: true, z: 1, z_Description: null, zEditable: true };
-          const nameCmd = { id: apId, takeoffId: tid, fill: pd.fill || "rgba(0,0,0,1)", strokeThickness: pd.strokeThickness != null ? pd.strokeThickness : 2, userInputProductName: p.name, defaultShapeRepresentation: pd.defaultShapeRepresentation, eachProductWidthCalculationMethod: pd.eachProductWidthCalculationMethod, dimensions: dims, facilityLaborCategoryId: pd.facilityLaborCategoryId, taxRegulationsType: 5, spriteType: pd.spriteType, takeoffMethod: pd.takeoffMethod, type: pd.type, description: null, $type: "AttachedProductEditCommonPropertiesCommand" };
+          // type:1 = Product Type "PP" (a required field that real products carry;
+          // leaving it 0/unset renders the product but breaks proposal + budget
+          // grids). dims x/y/z=1 + taxRegulationsType=5 make it ready to draw.
+          const nameCmd = { id: apId, takeoffId: tid, fill: pd.fill || "rgba(0,0,0,1)", strokeThickness: pd.strokeThickness != null ? pd.strokeThickness : 2, userInputProductName: p.name, defaultShapeRepresentation: pd.defaultShapeRepresentation, eachProductWidthCalculationMethod: pd.eachProductWidthCalculationMethod, dimensions: dims, facilityLaborCategoryId: pd.facilityLaborCategoryId, taxRegulationsType: 5, spriteType: pd.spriteType, takeoffMethod: pd.takeoffMethod, type: 1, description: null, $type: "AttachedProductEditCommonPropertiesCommand" };
           r = await cmd(nameCmd);
           if (!ok(r) && /unique/i.test(desc(r) || "")) {
             // A product with this name already exists — if it's our own orphan from a
