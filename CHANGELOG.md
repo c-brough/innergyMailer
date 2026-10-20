@@ -3,6 +3,11 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.18.4] - 2026-10-20
+### Fixed
+- Quick Change Order wizard commit failed with "r is not defined" — a variable
+  scoping regression from the previous fix. Product creation now works again.
+
 ## [1.18.3] - 2026-10-19
 ### Fixed
 - Quick Change Order wizard commit: two reliability fixes. (1) It now reads the

@@ -154,7 +154,7 @@
           if (p.done) continue;
           status('Adding product "' + p.name + '"…');
           const apId = uuid();
-          r = await cmd({ takeoffId: tid, attachedProductId: apId, $type: "ProductsPaletteAttachCustomProductCommand" });
+          let r = await cmd({ takeoffId: tid, attachedProductId: apId, $type: "ProductsPaletteAttachCustomProductCommand" });
           if (!ok(r)) throw new Error("creating product — " + desc(r));
           const pd = (await q({ takeoffId: tid, attachedProductId: apId, $type: "ProductsPaletteAttachedProductQuery" })) || {};
           const dims = { count: (pd.dimensions && pd.dimensions.count) || 3, x: 1, x_Description: null, xEditable: true, y: 1, y_Description: null, yEditable: true, z: 1, z_Description: null, zEditable: true };
