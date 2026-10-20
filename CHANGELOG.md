@@ -3,6 +3,15 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.18.3] - 2026-10-19
+### Fixed
+- Quick Change Order wizard commit: two reliability fixes. (1) It now reads the
+  open sheet id from the takeoff's own sheet queries, so creating records no longer
+  fails with "An error occurred while creating Location" when the sheet id couldn't
+  be scraped. (2) Re-committing after a failed attempt no longer errors on "Location
+  with this number and name already exists" — it reuses the existing location. Error
+  messages are also more specific now, and new locations sit in a safer spot.
+
 ## [1.18.2] - 2026-10-19
 ### Fixed
 - Quick Change Order wizard commit failed at "placing location" when the generated

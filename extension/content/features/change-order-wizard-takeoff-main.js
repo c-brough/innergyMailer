@@ -38,18 +38,22 @@
     } catch (e) { /* ignore */ }
   }
 
-  // Observe the app's own traffic to capture headers + an open sheetId.
+  // Observe the app's own traffic to capture headers + the open sheetId. The
+  // currently-open sheetId rides in the body of the app's sheet queries
+  // (SheetDetailsQuery / SheetProductSuggestionsQuery) — the most reliable source,
+  // since it doesn't depend on any placed location existing. We also scan
+  // responses as a fallback.
   window.fetch = function (input, init) {
+    const url = (typeof input === "string") ? input : (input && input.url) || "";
     try {
-      const url = (typeof input === "string") ? input : (input && input.url) || "";
-      if (QC_RE.test(url)) grabHeaders(init);
+      if (QC_RE.test(url)) {
+        grabHeaders(init);
+        if (!sheetId && init && init.body) { const m = String(init.body).match(SHEET_RE); if (m) sheetId = m[1]; }
+      }
     } catch (e) { /* ignore */ }
     const p = origFetch.apply(this, arguments);
-    if (!sheetId) {
-      try {
-        const url = (typeof input === "string") ? input : (input && input.url) || "";
-        if (QC_RE.test(url)) p.then((r) => { try { r.clone().text().then((t) => { const m = t.match(SHEET_RE); if (m && !sheetId) sheetId = m[1]; }, () => {}); } catch (e) {} }, () => {});
-      } catch (e) { /* ignore */ }
+    if (!sheetId && QC_RE.test(url)) {
+      try { p.then((r) => { try { r.clone().text().then((t) => { const m = t.match(SHEET_RE); if (m && !sheetId) sheetId = m[1]; }, () => {}); } catch (e) {} }, () => {}); } catch (e) { /* ignore */ }
     }
     return p;
   };
@@ -64,8 +68,9 @@
         const h = this.__icH; headers = { clientId: h.clientId, takeoffId: h.takeoffId, projectId: h.projectId, clientVersion: h.clientVersion, clientRequestPath: h.clientRequestPath };
       }
       if (!sheetId && QC_RE.test(this.__icU || "")) {
+        if (b) { const m = String(b).match(SHEET_RE); if (m) sheetId = m[1]; }
         const self = this;
-        this.addEventListener("load", function () { try { const m = String(self.responseText).match(SHEET_RE); if (m && !sheetId) sheetId = m[1]; } catch (e) {} });
+        this.addEventListener("load", function () { try { if (!sheetId) { const m = String(self.responseText).match(SHEET_RE); if (m) sheetId = m[1]; } } catch (e) {} });
       }
     } catch (e) { /* ignore */ }
     return OS.apply(this, arguments);
