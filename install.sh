@@ -42,6 +42,19 @@ if ! "$PYTHON_BIN" -c 'import sys' >/dev/null 2>&1; then
 fi
 echo "Using python3: $PYTHON_BIN"
 
+# 1b. Ensure the host Python can verify TLS certificates. python.org builds on
+#     macOS ship with NO default CA bundle until the user runs "Install
+#     Certificates.command", so the host's HTTPS downloads (the one-click update)
+#     fail with CERTIFICATE_VERIFY_FAILED. Install certifi for this interpreter —
+#     the host points SSL at it — so updates work without that manual step.
+if ! "$PYTHON_BIN" -c 'import certifi' >/dev/null 2>&1; then
+  echo "Installing CA certificates for the host Python (certifi)..."
+  "$PYTHON_BIN" -m pip install --quiet --upgrade certifi >/dev/null 2>&1 \
+    || "$PYTHON_BIN" -m pip install --quiet --user --upgrade certifi >/dev/null 2>&1 \
+    || echo "  (couldn't install certifi automatically; if updates fail, run:" \
+            "\"/Applications/Python 3.12/Install Certificates.command\")"
+fi
+
 # 2. Copy the host into the install dir and create a wrapper that invokes it with
 #    that absolute interpreter.
 mkdir -p "$INSTALL_DIR"

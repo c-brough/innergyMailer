@@ -3,6 +3,15 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.19.4] - 2026-10-21
+### Fixed
+- One-click update failing with `CERTIFICATE_VERIFY_FAILED` on macOS. python.org
+  Python ships with no CA bundle until "Install Certificates.command" is run, so the
+  native helper couldn't verify GitHub's certificate when downloading an update. The
+  helper now uses certifi's CA bundle when available, and the macOS installer installs
+  certifi for the host Python. (Re-run the installer to pick up the fix; or run
+  `"/Applications/Python 3.12/Install Certificates.command"` once.)
+
 ## [1.19.3] - 2026-10-21
 ### Fixed
 - Options page: widened the content column (520px → 780px) so longer labels and the

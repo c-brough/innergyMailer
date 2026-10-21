@@ -79,6 +79,17 @@ def _extension_target():
     return next((c for c in EXTRA_EXTENSION_DIRS if c), candidates[0])
 
 
+def _ssl_context():
+    """TLS context with a working CA bundle (prefer certifi), so HTTPS downloads
+    don't fail with CERTIFICATE_VERIFY_FAILED on Pythons lacking a default one."""
+    import ssl
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        return ssl.create_default_context()
+
+
 def update_extension(branch):
     """Download extension/ for `branch` and replace the installed folder. Returns
     the new version string."""
@@ -89,7 +100,7 @@ def update_extension(branch):
     url = "https://codeload.github.com/%s/zip/refs/heads/%s" % (GITHUB_REPO, branch)
     log("update: downloading %s -> %s" % (url, target))
     req = urllib.request.Request(url, headers={"User-Agent": "InnerCider-Updater"})
-    with urllib.request.urlopen(req, timeout=60) as resp:
+    with urllib.request.urlopen(req, timeout=60, context=_ssl_context()) as resp:
         blob = resp.read()
     zf = zipfile.ZipFile(io.BytesIO(blob))
     tmp = tempfile.mkdtemp(prefix="innercider-upd-")
