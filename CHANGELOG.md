@@ -3,6 +3,21 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.19.0] - 2026-10-20
+### Added
+- **Windows file-path links**: any `W:\…` or `M:\…` path written in Innergy (e.g. a
+  work-order folder pasted into a note) is now a clickable link that opens that folder.
+  The whole path is captured to the end of the line, so folder/file names with spaces
+  stay intact.
+  - On **Mac/Linux** the mapped drive opens over the network share: `W:\` →
+    `smb://10.1.0.6/Projects-CPW`, `M:\` →
+    `smb://10.1.0.6/Projects-CPW/CNC/Microvellum Data` (the rest of the path converted
+    to a forward-slash, space-encoded SMB URL).
+  - On **Windows** it opens the native path in File Explorer, and copies the path as a
+    fallback (browsers block `file://` links from a web page).
+  - On by default; opt out under **Windows file-path links** in Options. Makes no
+    network requests.
+
 ## [1.18.8] - 2026-10-20
 ### Fixed
 - Quick Change Order wizard: a commit whose takeoff tab was closed before it

@@ -534,6 +534,32 @@
       </div>
     </details>
 
+    <!-- ===== Windows file-path links ============================= -->
+    <details class="cat" data-cat="file-paths">
+      <summary>Windows file-path links <span class="cat-tag">on by default</span></summary>
+      <div class="cat-body">
+        <fieldset id="fs-file-paths">
+          <p class="fs-note">
+            Turns any <strong>W:\…</strong> or <strong>M:\…</strong> path written in Innergy
+            (e.g. a work-order folder in a note) into a clickable link that opens that folder.
+            The whole path is captured to the end of the line, so names with spaces stay intact.
+            On by default — turn off to opt out.
+          </p>
+          <p class="fs-note" style="margin-top:6px">
+            On <strong>Mac</strong> the mapped drive opens over the network share:
+            <code>W:\</code> → <code>smb://10.1.0.6/Projects-CPW</code>,
+            <code>M:\</code> → <code>smb://10.1.0.6/Projects-CPW/CNC/Microvellum&nbsp;Data</code>.
+            On <strong>Windows</strong> it opens the native path in File Explorer (and copies the
+            path as a fallback).
+          </p>
+          <label class="opt">
+            <input type="checkbox" id="file-paths-enabled" />
+            Enable Windows file-path links
+          </label>
+        </fieldset>
+      </div>
+    </details>
+
     <!-- ===== Notifications sidebar ================================ -->
     <details class="cat" data-cat="notifications">
       <summary>Notifications sidebar <span class="cat-tag">opt-in</span></summary>

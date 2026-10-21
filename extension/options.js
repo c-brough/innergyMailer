@@ -494,6 +494,17 @@ coWizBox.addEventListener("change", (e) => {
   showSaved();
 });
 
+// ---- Windows file-path links (opt-out; ON by default) -----------------------
+// content/features/file-path-links.js reads `filePathLinksEnabled`.
+const fpBox = document.getElementById("file-paths-enabled");
+chrome.storage.local.get("filePathLinksEnabled", (data) => {
+  fpBox.checked = data.filePathLinksEnabled !== false; // default on
+});
+fpBox.addEventListener("change", (e) => {
+  chrome.storage.local.set({ filePathLinksEnabled: e.target.checked });
+  showSaved();
+});
+
 // ---- Notifications sidebar (opt-in) + default filters ------------------------
 // content/features/notifications-sidebar.js reads notifSidebarEnabled,
 // notifDefaultStatus and notifTypes ({notes,tasks,reports,other}).
@@ -780,12 +791,13 @@ notifTypeBoxes.forEach((cb) => cb.addEventListener("change", saveNotifTypes));
       case "notes": return data.notesEnhancementsEnabled !== false; // on by default
       case "note-drafts": return data.noteDraftsEnabled !== false;  // on by default
       case "co-wizard": return data.changeOrderWizardEnabled !== false; // on by default
+      case "file-paths": return data.filePathLinksEnabled !== false; // on by default
       case "notifications": return data.notifSidebarEnabled === true;
       default: return false;                     // Updates: neutral
     }
   }
   function refresh() {
-    chrome.storage.local.get(["mailApp", "poEmailEnabled", "bomBaseUrl", "timeTrackingEnabled", "notesEnhancementsEnabled", "noteDraftsEnabled", "changeOrderWizardEnabled", "notifSidebarEnabled"], (data) => {
+    chrome.storage.local.get(["mailApp", "poEmailEnabled", "bomBaseUrl", "timeTrackingEnabled", "notesEnhancementsEnabled", "noteDraftsEnabled", "changeOrderWizardEnabled", "filePathLinksEnabled", "notifSidebarEnabled"], (data) => {
       cats.forEach((c) => c.classList.toggle("cat--on", isOn(c, data)));
       // Mail app gating.
       if (mailCat) {
@@ -798,7 +810,7 @@ notifTypeBoxes.forEach((cb) => cb.addEventListener("change", saveNotifTypes));
   }
   refresh();
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && (changes.mailApp || changes.poEmailEnabled || changes.bomBaseUrl || changes.timeTrackingEnabled || changes.notesEnhancementsEnabled || changes.noteDraftsEnabled || changes.changeOrderWizardEnabled || changes.notifSidebarEnabled)) refresh();
+    if (area === "local" && (changes.mailApp || changes.poEmailEnabled || changes.bomBaseUrl || changes.timeTrackingEnabled || changes.notesEnhancementsEnabled || changes.noteDraftsEnabled || changes.changeOrderWizardEnabled || changes.filePathLinksEnabled || changes.notifSidebarEnabled)) refresh();
   });
 
   // Expand / collapse all (only categories currently shown; never expand a
