@@ -5,7 +5,10 @@
  * These show up as plain text. This feature turns any `W:\…` or `M:\…` path it
  * finds in the page text into a clickable link that opens that folder:
  *
- *   • Windows  → the native path (File Explorer).
+ *   • Windows  → opens the folder as Chrome's own file-browser tab (file:///…),
+ *     opened by the background worker since an https page can't navigate to
+ *     file://. This needs Chrome's one-time per-extension "Allow access to file
+ *     URLs" toggle; when it's off we guide the user to it and copy the path.
  *   • Mac/Linux → the CPW file server over SMB, mapping the mapped drive to its
  *     share: W:\  →  smb://10.1.0.6/Projects-CPW
  *             M:\  →  smb://10.1.0.6/Projects-CPW/CNC/Microvellum Data
@@ -105,6 +108,19 @@
         font:13px/1.3 -apple-system,Segoe UI,Roboto,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.35);
         animation:icPathToast .2s ease-out}
       @keyframes icPathToast{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
+      #ic-path-card{position:fixed;right:22px;bottom:22px;z-index:2147483601;width:340px;max-width:calc(100vw - 44px);
+        background:#fff;color:#1f2937;border:1px solid #e5e7eb;border-radius:12px;padding:16px 18px;
+        box-shadow:0 18px 50px rgba(0,0,0,.28);font:13px/1.45 -apple-system,Segoe UI,Roboto,sans-serif;
+        animation:icPathCard .2s ease-out}
+      @keyframes icPathCard{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+      #ic-path-card .ic-pc-title{font-size:14px;font-weight:700;margin-bottom:6px}
+      #ic-path-card .ic-pc-body{color:#475569;margin-bottom:12px}
+      #ic-path-card .ic-pc-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+      #ic-path-card .ic-pc-btn{cursor:pointer;border:1px solid #cbd5e1;background:#fff;border-radius:8px;
+        padding:6px 12px;font-size:12.5px;font-weight:600;color:#334155}
+      #ic-path-card .ic-pc-btn:hover{background:#f1f5f9}
+      #ic-path-card .ic-pc-primary{background:#1a56db;border-color:#1a56db;color:#fff}
+      #ic-path-card .ic-pc-primary:hover{background:#1646b8}
     `;
     (document.head || document.documentElement).appendChild(st);
   }
@@ -159,15 +175,70 @@
 
   // ---- click handling --------------------------------------------------------
   // Mac/Linux: let the smb:// href navigate — the OS prompts to open Finder/Files.
-  // Windows: file:// links are blocked from an https page, so also copy the native
-  // path and toast, so the user can paste it into Explorer's address bar.
+  // Windows: an https page can't navigate to file://, so ask the background worker
+  // to open the folder as a Chrome file-browser tab. If Chrome's per-extension
+  // "Allow access to file URLs" is off, guide the user to it and copy the path.
   function onClick(e) {
     if (!enabled) return;
     const a = e.target && e.target.closest && e.target.closest("a.ic-path-link");
     if (!a) return;
     if (!isWindows) return;
-    copyText(a.dataset.icNative || "");
-    toast("Path copied — paste into Explorer's address bar");
+    // Let modifier/middle clicks fall through; handle a plain left click ourselves.
+    if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    const url = a.getAttribute("href");
+    const native = a.dataset.icNative || "";
+    try {
+      chrome.runtime.sendMessage({ type: "OPEN_LOCAL_PATH", url }, (resp) => {
+        if (chrome.runtime.lastError || !resp) { copyFallback(native); return; }
+        if (resp.ok) return;                       // opened in a tab
+        if (resp.needsFileAccess) { promptFileAccess(native); return; }
+        copyFallback(native);
+      });
+    } catch (err) { copyFallback(native); }
+  }
+
+  function copyFallback(native) {
+    copyText(native);
+    toast("Path copied — paste it into a Chrome tab or Explorer");
+  }
+
+  // One-time setup guidance when file access is off.
+  function promptFileAccess(native) {
+    copyText(native); // copied so they can paste meanwhile
+    showCard(
+      "Open folders in a Chrome tab",
+      "Chrome needs file access for this extension — a one-time switch. On the " +
+        "extension's settings page, turn on “Allow access to file URLs,” " +
+        "then click the path again. (The path is copied to your clipboard for now.)",
+      [
+        { label: "Open extension settings", primary: true, onClick: () => {
+            try { chrome.runtime.sendMessage({ type: "OPEN_EXT_SETTINGS" }); } catch (e) { /* ignore */ }
+            closeCard();
+          } },
+        { label: "Dismiss", onClick: closeCard },
+      ]
+    );
+  }
+
+  function closeCard() { const c = document.getElementById("ic-path-card"); if (c) c.remove(); }
+  function showCard(title, body, actions) {
+    ensureStyle();
+    closeCard();
+    const card = document.createElement("div");
+    card.id = "ic-path-card";
+    const h = document.createElement("div"); h.className = "ic-pc-title"; h.textContent = title;
+    const p = document.createElement("div"); p.className = "ic-pc-body"; p.textContent = body;
+    const row = document.createElement("div"); row.className = "ic-pc-actions";
+    for (const a of actions) {
+      const b = document.createElement("button");
+      b.className = "ic-pc-btn" + (a.primary ? " ic-pc-primary" : "");
+      b.textContent = a.label;
+      b.addEventListener("click", a.onClick);
+      row.appendChild(b);
+    }
+    card.append(h, p, row);
+    document.body.appendChild(card);
   }
 
   function copyText(text) {

@@ -3,6 +3,17 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.19.1] - 2026-10-20
+### Changed
+- Windows file-path links now open the folder as a **Chrome file-browser tab**
+  (`file:///…`) instead of only copying the path — browse subfolders and preview
+  files right in the tab. Because an https page can't open `file://` itself, the
+  extension's background worker opens the tab. Chrome requires its one-time per-
+  extension **"Allow access to file URLs"** toggle (no code can flip it); when it's
+  off, the first click shows a short prompt with a button to the extension's
+  settings page and copies the path meanwhile. Once enabled, clicks just open the
+  folder. Mac/Linux are unchanged (SMB → Finder/Files).
+
 ## [1.19.0] - 2026-10-20
 ### Added
 - **Windows file-path links**: any `W:\…` or `M:\…` path written in Innergy (e.g. a
