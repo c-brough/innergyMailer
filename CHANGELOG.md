@@ -3,6 +3,11 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.19.3] - 2026-10-21
+### Fixed
+- Options page: widened the content column (520px → 780px) so longer labels and the
+  helper install one-liner no longer clip.
+
 ## [1.19.2] - 2026-10-21
 ### Added
 - Windows file-path links: an **"Open in real app"** option. When on, clicking a
