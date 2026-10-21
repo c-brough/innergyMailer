@@ -236,10 +236,31 @@ def draft_email(attachments, subject, body, recipients, app):
         )
 
 
+def open_path(target):
+    """Open a folder/file (or smb:// URL) in Finder / its default app."""
+    target = (target or "").strip()
+    if not target or "\n" in target or "\r" in target:
+        raise ValueError("no valid path provided")
+    log("open_path: %r" % target)
+    # `open` is a launcher, not a shell — the arg list can't be injected into.
+    subprocess.Popen(["open", target])
+
+
 def main():
     try:
         msg = read_message()
         if msg is None:
+            return
+        if msg.get("action") == "ping":
+            send_message({"ok": True, "pong": True})
+            return
+        if msg.get("action") == "open_path":
+            try:
+                open_path(msg.get("target"))
+                send_message({"ok": True})
+            except Exception as exc:
+                log("ERROR open_path: " + traceback.format_exc())
+                send_message({"ok": False, "error": str(exc)})
             return
         if msg.get("action") == "update":
             try:

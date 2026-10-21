@@ -10,7 +10,14 @@
  * for this extension (a per-extension toggle no API can flip). We check it
  * first and, when it's off, tell the content script to guide the user rather
  * than silently opening a Chrome error page.
+ *
+ * With the "open in real app" option on, we instead hand the path to the native
+ * messaging host (open_path), which opens it in the OS file browser / default
+ * app (Finder/Explorer). PING_HOST lets Options check the helper is installed;
+ * OPEN_OPTIONS opens this extension's Options page.
  */
+
+import { sendNative } from "../shared/native.js";
 
 function isAllowedFileAccess() {
   return new Promise((resolve) => {
@@ -52,4 +59,25 @@ export async function handleOpenExtSettings(msg, sender, sendResponse) {
   } catch (e) {
     sendResponse({ ok: false, error: String(e) });
   }
+}
+
+// "Open in real app" — hand the path to the native host, which opens it in the
+// OS file browser / default app. `target` is the smb:// URL (Mac/Linux) or the
+// native drive path (Windows). Relays the host result, including transportError
+// when the helper isn't installed.
+export async function handleOpenPathNative(msg, sender, sendResponse) {
+  const target = String((msg && msg.target) || "");
+  if (!target) { sendResponse({ ok: false, error: "no target" }); return; }
+  sendResponse(await sendNative({ action: "open_path", target }));
+}
+
+// Options → "Check helper": verify the native host is installed/reachable.
+export async function handlePingHost(msg, sender, sendResponse) {
+  sendResponse(await sendNative({ action: "ping" }));
+}
+
+// Open this extension's Options page (from a content-script request).
+export function handleOpenOptions(msg, sender, sendResponse) {
+  try { chrome.runtime.openOptionsPage(); sendResponse({ ok: true }); }
+  catch (e) { sendResponse({ ok: false, error: String(e) }); }
 }

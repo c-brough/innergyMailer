@@ -17,6 +17,11 @@
  * The whole path is captured to the end of its line, so folder/file names with
  * spaces (very common here) stay intact.
  *
+ * "Open in real app" option (filePathOpenNative, off by default): when on, a
+ * click hands the path to the native helper, which opens it in the OS file
+ * browser (Finder/Explorer) and files in their default app — on every OS. When
+ * off, the per-OS behavior above is used.
+ *
  * NO NETWORK: this feature makes zero requests. It only reads page text and
  * reads chrome.storage.local for its on/off flag. Clicking a link hands the
  * URL to the OS (Finder/Explorer), not to Innergy.
@@ -54,33 +59,46 @@
     '[contenteditable="true"],[data-lexical-editor],.ContentEditable__root,.ic-path-toast';
   const SCAN_DEBOUNCE_MS = 350;
 
-  // ---- enabled flag (opt-out) ------------------------------------------------
+  // ---- flags -----------------------------------------------------------------
+  // enabled: opt-out, on by default. openNative: opt-in — open in the OS file
+  // browser / default app via the native helper instead of a browser view.
   let enabled = true;
-  chrome.storage.local.get("filePathLinksEnabled", (d) => {
+  let openNative = false;
+  chrome.storage.local.get(["filePathLinksEnabled", "filePathOpenNative"], (d) => {
     enabled = d.filePathLinksEnabled !== false;
+    openNative = d.filePathOpenNative === true;
     if (!enabled) teardown(); else scheduleScan();
   });
   chrome.storage.onChanged.addListener((c, area) => {
-    if (area !== "local" || !c.filePathLinksEnabled) return;
-    enabled = c.filePathLinksEnabled.newValue !== false;
-    if (!enabled) teardown(); else scheduleScan();
+    if (area !== "local") return;
+    if (c.filePathOpenNative) openNative = c.filePathOpenNative.newValue === true;
+    if (c.filePathLinksEnabled) {
+      enabled = c.filePathLinksEnabled.newValue !== false;
+      if (!enabled) teardown(); else scheduleScan();
+    }
   });
 
   // ---- URL building ----------------------------------------------------------
-  function hrefFor(path) {
+  function smbUrlFor(path) {
     const drive = path[0].toUpperCase();
     const segs = path.slice(3).split(/\\+/).filter(Boolean); // drop "X:\" then split
-    if (isWindows) return "file:///" + drive + ":/" + segs.map(encodeURIComponent).join("/");
     const base = SMB[drive] || SMB.W;
     return base + segs.map((s) => "/" + encodeURIComponent(s)).join("");
   }
+  function fileUrlFor(path) {
+    const drive = path[0].toUpperCase();
+    const segs = path.slice(3).split(/\\+/).filter(Boolean);
+    return "file:///" + drive + ":/" + segs.map(encodeURIComponent).join("/");
+  }
+  function hrefFor(path) { return isWindows ? fileUrlFor(path) : smbUrlFor(path); }
 
   function buildLink(path) {
     const a = document.createElement("a");
     a.className = "ic-path-link";
     a.setAttribute("href", hrefFor(path));
     a.setAttribute("rel", "noopener");
-    a.dataset.icNative = path;
+    a.dataset.icNative = path;              // raw drive path (Windows open / clipboard)
+    a.dataset.icSmb = smbUrlFor(path);      // smb:// URL (Mac/Linux open)
     a.title = (isWindows ? "Open in File Explorer" : "Open in Finder") + " — " + path;
     const ico = document.createElement("span");
     ico.className = "ic-path-ico";
@@ -174,18 +192,63 @@
   }
 
   // ---- click handling --------------------------------------------------------
-  // Mac/Linux: let the smb:// href navigate — the OS prompts to open Finder/Files.
-  // Windows: an https page can't navigate to file://, so ask the background worker
-  // to open the folder as a Chrome file-browser tab. If Chrome's per-extension
-  // "Allow access to file URLs" is off, guide the user to it and copy the path.
+  // Three routes:
+  //   • "Open in real app" on  → native helper opens it in Finder/Explorer.
+  //   • Mac/Linux (default)     → let the smb:// href navigate (Finder/Files).
+  //   • Windows (default)       → background opens a Chrome file-browser tab.
   function onClick(e) {
     if (!enabled) return;
     const a = e.target && e.target.closest && e.target.closest("a.ic-path-link");
     if (!a) return;
-    if (!isWindows) return;
-    // Let modifier/middle clicks fall through; handle a plain left click ourselves.
+    // Let modifier/middle clicks fall through to the browser's own handling.
     if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
-    e.preventDefault();
+
+    if (openNative) {
+      e.preventDefault();
+      openViaHost(a);
+      return;
+    }
+    if (!isWindows) return;            // default Mac/Linux: smb:// href navigates
+    e.preventDefault();                // default Windows: Chrome file-browser tab
+    openWinTab(a);
+  }
+
+  // "Open in real app": hand the path to the native helper.
+  function openViaHost(a) {
+    const target = isWindows ? (a.dataset.icNative || "") : (a.dataset.icSmb || a.getAttribute("href"));
+    try {
+      chrome.runtime.sendMessage({ type: "OPEN_LOCAL_PATH_NATIVE", target }, (resp) => {
+        if (chrome.runtime.lastError || !resp) { hostMissing(a); return; }
+        if (resp.ok) return;
+        if (resp.transportError) { hostMissing(a); return; }
+        toast("Couldn't open the folder: " + (resp.error || "unknown error"));
+      });
+    } catch (err) { hostMissing(a); }
+  }
+
+  // Native helper not installed — open the folder the normal way so the user
+  // isn't blocked, and point them to Options to set the helper up.
+  function hostMissing(a) {
+    if (isWindows) copyText(a.dataset.icNative || "");
+    else { try { window.location.href = a.dataset.icSmb || a.getAttribute("href"); } catch (e) { /* ignore */ } }
+    showCard(
+      "Open in your file browser",
+      "To open folders in Finder/Explorer and files in their real app, install the " +
+        "InnerCider helper, then re-run the installer. You can set it up under " +
+        "“Windows file-path links” in Options." +
+        (isWindows ? " (The path is copied for now.)" : ""),
+      [
+        { label: "Open Options", primary: true, onClick: () => {
+            try { chrome.runtime.sendMessage({ type: "OPEN_OPTIONS" }); } catch (e) { /* ignore */ }
+            closeCard();
+          } },
+        { label: "Dismiss", onClick: closeCard },
+      ]
+    );
+  }
+
+  // Windows default: open the folder as a Chrome file-browser tab.
+  function openWinTab(a) {
     const url = a.getAttribute("href");
     const native = a.dataset.icNative || "";
     try {

@@ -505,6 +505,73 @@ fpBox.addEventListener("change", (e) => {
   showSaved();
 });
 
+// "Open in real app" — route clicks through the native helper (opt-in).
+const fpNativeBox = document.getElementById("file-paths-native");
+chrome.storage.local.get("filePathOpenNative", (data) => {
+  fpNativeBox.checked = data.filePathOpenNative === true;
+});
+fpNativeBox.addEventListener("change", (e) => {
+  chrome.storage.local.set({ filePathOpenNative: e.target.checked });
+  showSaved();
+});
+
+// Installer one-liner for the current OS + a helper reachability check.
+(() => {
+  const ONE_LINERS = {
+    mac: "curl -fsSL https://raw.githubusercontent.com/c-brough/innergyMailer/main/bootstrap.sh | bash",
+    linux: "curl -fsSL https://raw.githubusercontent.com/c-brough/innergyMailer/main/bootstrap.sh | bash",
+    win: "irm https://raw.githubusercontent.com/c-brough/innergyMailer/main/bootstrap.ps1 | iex",
+  };
+  const NOTES = {
+    mac: "Paste into Terminal and press Return, then follow the prompts.",
+    linux: "Paste into a terminal and press Enter, then follow the prompts.",
+    win: "Paste into Windows PowerShell and press Enter, then follow the prompts.",
+  };
+  const cmd = ONE_LINERS[currentOs] || ONE_LINERS.mac;
+  const box = document.getElementById("fp-oneliner");
+  const note = document.getElementById("fp-oneliner-note");
+  if (box) box.textContent = cmd;
+  if (note) note.textContent = NOTES[currentOs] || "";
+
+  const copyBtn = document.getElementById("fp-copy-cmd");
+  if (copyBtn) {
+    copyBtn.addEventListener("click", () => {
+      navigator.clipboard.writeText(cmd).then(
+        () => { const o = copyBtn.textContent; copyBtn.textContent = "Copied!"; setTimeout(() => (copyBtn.textContent = o), 1400); },
+        () => {}
+      );
+    });
+  }
+
+  const checkBtn = document.getElementById("fp-check-helper");
+  const status = document.getElementById("fp-helper-status");
+  if (checkBtn && status) {
+    checkBtn.addEventListener("click", () => {
+      status.style.color = "#667";
+      status.textContent = "Checking…";
+      checkBtn.disabled = true;
+      chrome.runtime.sendMessage({ type: "PING_HOST" }, (resp) => {
+        checkBtn.disabled = false;
+        if (chrome.runtime.lastError || !resp) {
+          status.style.color = "#b91c1c";
+          status.textContent = "Couldn't reach the extension worker — reload the extension.";
+          return;
+        }
+        if (resp.ok && resp.pong) {
+          status.style.color = "#157347";
+          status.textContent = "Helper is installed and reachable ✓";
+        } else if (resp.transportError) {
+          status.style.color = "#b45309";
+          status.textContent = "Helper not found — run the installer above, then check again.";
+        } else {
+          status.style.color = "#b91c1c";
+          status.textContent = "Helper error: " + (resp.error || "unknown");
+        }
+      });
+    });
+  }
+})();
+
 // ---- Notifications sidebar (opt-in) + default filters ------------------------
 // content/features/notifications-sidebar.js reads notifSidebarEnabled,
 // notifDefaultStatus and notifTypes ({notes,tasks,reports,other}).

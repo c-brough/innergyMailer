@@ -495,6 +495,15 @@ def _graph_auth_complete():
     return {"ok": True, "message": "Signed in successfully."}
 
 
+def open_path(target):
+    """Open a folder/file (or smb:// URL) in the default file manager / app."""
+    target = (target or "").strip()
+    if not target or "\n" in target or "\r" in target:
+        raise ValueError("no valid path provided")
+    log("open_path: %r" % target)
+    subprocess.Popen(["xdg-open", target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 def main():
     try:
         msg = read_message()
@@ -502,6 +511,17 @@ def main():
             return
 
         action = msg.get("action")
+        if action == "ping":
+            send_message({"ok": True, "pong": True})
+            return
+        if action == "open_path":
+            try:
+                open_path(msg.get("target"))
+                send_message({"ok": True})
+            except Exception as exc:
+                log("ERROR open_path: " + traceback.format_exc())
+                send_message({"ok": False, "error": str(exc)})
+            return
         if action == "update":
             try:
                 version = update_extension(msg.get("branch"))

@@ -557,6 +557,33 @@
             <input type="checkbox" id="file-paths-enabled" />
             Enable Windows file-path links
           </label>
+          <label class="opt">
+            <input type="checkbox" id="file-paths-native" />
+            Open in the computer's file browser / default app (needs the helper)
+          </label>
+          <p class="fs-note" style="margin-top:4px">
+            With this on, clicking a path opens the folder in <strong>Finder/Explorer</strong>
+            (and files in their default app) through the installed InnerCider helper — the
+            same helper used for drafting PO emails. Leave it off to use the built-in
+            behavior above (SMB on Mac, Chrome file tab on Windows).
+          </p>
+
+          <div style="margin-top:10px;padding:11px 13px;background:#f6f7f9;border:1px solid #e6e8ec;border-radius:9px">
+            <div style="font-size:12.5px;font-weight:600;color:#333;margin-bottom:6px">Set up / repair the helper</div>
+            <p class="fs-note" style="margin-top:0">
+              "Open in real app" needs the InnerCider helper installed. To install or repair it,
+              re-run the installer with this one-liner for your system:
+            </p>
+            <div style="display:flex;gap:8px;align-items:flex-start;margin:8px 0">
+              <code id="fp-oneliner" style="flex:1;font-size:12px;background:#fff;border:1px solid #e0e2e6;border-radius:6px;padding:7px 9px;overflow:auto;white-space:nowrap"></code>
+              <button type="button" id="fp-copy-cmd">Copy</button>
+            </div>
+            <p class="fs-note" id="fp-oneliner-note" style="margin-top:0"></p>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+              <button type="button" id="fp-check-helper">Check helper</button>
+              <span id="fp-helper-status" style="font-size:12px;color:#667"></span>
+            </div>
+          </div>
         </fieldset>
       </div>
     </details>

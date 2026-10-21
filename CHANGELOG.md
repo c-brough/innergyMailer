@@ -3,6 +3,20 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.19.2] - 2026-10-21
+### Added
+- Windows file-path links: an **"Open in real app"** option. When on, clicking a
+  `W:\…`/`M:\…` path hands it to the InnerCider helper, which opens the folder in
+  **Finder/Explorer** (and files in their **default app**) on any OS — the true
+  native open, rather than a browser view. Off by default; opt in under **Windows
+  file-path links** in Options.
+- Options (Windows file-path links): a **helper setup** box with the install one-liner
+  for your OS (Copy button) and a **"Check helper"** button that verifies the native
+  helper is installed and reachable.
+- Native helper: new `open_path` action (opens a folder/file/`smb://` URL in the OS
+  default handler) and a `ping` action for the reachability check. Re-run the installer
+  to pick up the updated helper.
+
 ## [1.19.1] - 2026-10-20
 ### Changed
 - Windows file-path links now open the folder as a **Chrome file-browser tab**

@@ -19,7 +19,13 @@ import {
 } from "./features/draft-email.js";
 import { handleGraphAuth } from "./features/graph-auth.js";
 import { handleUpdateExtension } from "./features/update.js";
-import { handleOpenLocalPath, handleOpenExtSettings } from "./features/open-path.js";
+import {
+  handleOpenLocalPath,
+  handleOpenExtSettings,
+  handleOpenPathNative,
+  handlePingHost,
+  handleOpenOptions,
+} from "./features/open-path.js";
 
 const handlers = {
   EXPORT_AND_MAIL: handleExportAndMail,
@@ -28,6 +34,9 @@ const handlers = {
   UPDATE_EXTENSION: handleUpdateExtension,
   OPEN_LOCAL_PATH: handleOpenLocalPath,
   OPEN_EXT_SETTINGS: handleOpenExtSettings,
+  OPEN_LOCAL_PATH_NATIVE: handleOpenPathNative,
+  PING_HOST: handlePingHost,
+  OPEN_OPTIONS: handleOpenOptions,
 };
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
