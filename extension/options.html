@@ -208,6 +208,16 @@
     <h1>InnerCider</h1>
     <p class="sub">Settings for the Innergy tools.</p>
 
+    <!-- Extension controls: manual reload + whether Options reopens after it. -->
+    <div id="ext-controls" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 14px;padding:11px 13px;background:#f6f7f9;border:1px solid #e6e8ec;border-radius:9px">
+      <button id="reload-ext" type="button">Reload extension</button>
+      <label class="opt" style="margin:0;flex:1 1 auto">
+        <input type="checkbox" id="options-auto-open" />
+        Reopen this Options page after a reload
+      </label>
+      <span id="reload-status" style="font-size:12.5px;color:#667;min-width:0"></span>
+    </div>
+
     <!-- Shown by options.js when a newer version is on GitHub. -->
     <div id="update-banner">
       <div class="ub-row">
@@ -243,6 +253,14 @@
           <button id="view-changelog" type="button">View changelog</button>
         </div>
         <div id="updates-status"></div>
+        <label class="opt" style="margin-top:10px">
+          <input type="checkbox" id="auto-update-startup" />
+          Auto-update InnerCider when Chrome is quit and reopened
+        </label>
+        <p class="fs-note" style="margin-top:4px">
+          On each Chrome launch, pulls the latest for the tracked branch above (via the
+          installed helper) and reloads if there's a new version. Needs the helper installed.
+        </p>
       </div>
     </details>
 

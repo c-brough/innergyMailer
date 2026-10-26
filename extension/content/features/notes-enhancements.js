@@ -125,7 +125,8 @@
   }
 
   // ---- target note: border + center scroll ------------------------------------
-  let scrolledNoteId = null; // scroll only once per target
+  let scrolledNoteId = null; // scrollIntoView only once per target
+  let searchedNoteId = null; // list scroll-search attempted at most once per target
   let locating = false;
   const notesCache = { key: "", list: null };
 
@@ -219,29 +220,62 @@
   async function handleTarget() {
     const hash = location.hash || "";
     const m = hash.match(NOTE_RE);
-    if (!m) { clearBorder(); scrolledNoteId = null; return; }
+    if (!m) { clearBorder(); scrolledNoteId = null; searchedNoteId = null; return; }
     if (locating) return;
     const noteId = m[1];
     const eq = entityQuery(hash);
     if (!eq) return;
     locating = true;
     try {
-      const list = await fetchNotes(eq);
+      const list = await fetchNotes(eq); // cached after the first fetch
       const note = list && list.find((n) => n.id === noteId);
       if (!note) return;
       const probe = probeFromBody(note.body);
+      // Cheap text match first (runs every pass, so the border re-asserts after a
+      // re-render). Only fall back to the expensive list scroll-search ONCE per
+      // target — otherwise a note whose probe never matches made every mutation
+      // re-scroll the whole list (the "persisting / jumpy scroll" bug).
       let fig = findFigureByText(probe);
-      if (!fig) fig = await scrollSearch(probe);
-      if (fig) {
-        const card = markBorder(fig);
-        if (scrolledNoteId !== noteId) {
-          scrolledNoteId = noteId;
-          (card || fig).scrollIntoView({ block: "center", behavior: "smooth" });
-        }
+      if (!fig) {
+        if (searchedNoteId === noteId) return; // already tried scrolling the list
+        searchedNoteId = noteId;
+        fig = await scrollSearch(probe);
+        if (!fig) return;
+      }
+      const card = markBorder(fig);
+      if (scrolledNoteId !== noteId) {
+        scrolledNoteId = noteId;
+        settleScroll(card || fig);
       }
     } finally {
       locating = false;
     }
+  }
+
+  // Center the target, then re-center a few times as lazy content loads above it
+  // (fixes the "aim is off" drift). Instant scrolls, bounded, and the user's own
+  // scroll aborts further correction so it never fights them.
+  function settleScroll(target) {
+    const scroller = getScroller();
+    const src = scroller || window;
+    let aborted = false, tries = 0;
+    const onUser = () => { aborted = true; };
+    const center = () => { try { target.scrollIntoView({ block: "center", behavior: "auto" }); } catch (e) {} };
+    src.addEventListener("wheel", onUser, { once: true, passive: true });
+    src.addEventListener("touchstart", onUser, { once: true, passive: true });
+    center();
+    const tick = () => {
+      if (aborted || tries >= 6 || !document.body.contains(target)) {
+        src.removeEventListener("wheel", onUser); src.removeEventListener("touchstart", onUser);
+        return;
+      }
+      tries++;
+      const r = target.getBoundingClientRect();
+      const vh = window.innerHeight || document.documentElement.clientHeight;
+      if (Math.abs(r.top + r.height / 2 - vh / 2) > 60) center(); // drifted — recenter
+      setTimeout(tick, 300);
+    };
+    setTimeout(tick, 300);
   }
 
   // ---- teardown (on opt-out) ---------------------------------------------------
@@ -272,5 +306,5 @@
   }
 
   IC.registerFeature({ id: "notes-enhancements", mount: schedule });
-  window.addEventListener("hashchange", () => { scrolledNoteId = null; schedule(); });
+  window.addEventListener("hashchange", () => { scrolledNoteId = null; searchedNoteId = null; schedule(); });
 })();

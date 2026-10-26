@@ -306,6 +306,61 @@ function showSaved() {
   setTimeout(() => (el.textContent = ""), 1500);
 }
 
+// ---- Reload extension + reopen Options + auto-update on startup ---------------
+(() => {
+  // Reopen this Options page after a reload (opt-out, default on). The background
+  // worker reads optionsAutoOpen / optionsReopenPending.
+  const autoOpenBox = document.getElementById("options-auto-open");
+  chrome.storage.local.get("optionsAutoOpen", (d) => {
+    autoOpenBox.checked = d.optionsAutoOpen !== false; // default on
+  });
+  autoOpenBox.addEventListener("change", (e) => {
+    chrome.storage.local.set({ optionsAutoOpen: e.target.checked });
+    showSaved();
+  });
+
+  // Reload the extension, with a 3-2-1 countdown and a heads-up that this Options
+  // page closes (it reopens automatically if the box above is checked).
+  const reloadBtn = document.getElementById("reload-ext");
+  const reloadStatus = document.getElementById("reload-status");
+  let counting = false;
+  reloadBtn.addEventListener("click", () => {
+    if (counting) return;
+    counting = true;
+    reloadBtn.disabled = true;
+    const willReopen = autoOpenBox.checked;
+    const note = willReopen
+      ? "This Options page will close and reopen automatically."
+      : "This Options page will close — reopen it yourself (right-click the InnerCider icon → Options).";
+    let n = 3;
+    reloadStatus.style.color = "#b45309";
+    reloadStatus.textContent = `${note} Reloading in ${n}…`;
+    const tick = setInterval(() => {
+      n--;
+      if (n > 0) {
+        reloadStatus.textContent = `${note} Reloading in ${n}…`;
+        return;
+      }
+      clearInterval(tick);
+      reloadStatus.textContent = "Reloading…";
+      // Leave a short-lived flag so the worker reopens Options after the reload.
+      chrome.storage.local.set({ optionsReopenPending: Date.now() }, () => {
+        chrome.runtime.reload();
+      });
+    }, 1000);
+  });
+
+  // Auto-update InnerCider when Chrome is relaunched (opt-in, default off).
+  const autoUpdBox = document.getElementById("auto-update-startup");
+  chrome.storage.local.get("autoUpdateOnStartup", (d) => {
+    autoUpdBox.checked = d.autoUpdateOnStartup === true;
+  });
+  autoUpdBox.addEventListener("change", (e) => {
+    chrome.storage.local.set({ autoUpdateOnStartup: e.target.checked });
+    showSaved();
+  });
+})();
+
 // ---- Time Tracking Tools (opt-in) --------------------------------------------
 // Off by default; only turned on for people who edit/approve time. The content
 // feature (content/features/time-tracking.js) reads `timeTrackingEnabled`.

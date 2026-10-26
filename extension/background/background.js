@@ -26,6 +26,9 @@ import {
   handlePingHost,
   handleOpenOptions,
 } from "./features/open-path.js";
+import { registerLifecycle } from "./features/lifecycle.js";
+
+registerLifecycle();
 
 const handlers = {
   EXPORT_AND_MAIL: handleExportAndMail,

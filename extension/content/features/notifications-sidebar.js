@@ -142,10 +142,19 @@
     const full = fullUrl(u); if (!full) return;
     if (newTab) window.open(full, "_blank"); else location.href = full;
   }
+  // Innergy serializes datetimes with a short UTC offset like "-04" (no minutes),
+  // e.g. "2026-10-25T09:42:25.8885285-04", which new Date() rejects as invalid —
+  // so timestamps came back blank. Pad the offset to "-04:00" before parsing.
+  function parseInnergyDate(iso) {
+    let s = iso && typeof iso === "object" ? iso.dateTime : iso;
+    if (!s) return null;
+    s = String(s).replace(/([+-]\d{2})$/, "$1:00");
+    const d = new Date(s);
+    return isNaN(d) ? null : d;
+  }
   function fmtTime(iso) {
-    if (!iso) return "";
-    const d = new Date(typeof iso === "object" && iso.dateTime ? iso.dateTime : iso);
-    if (isNaN(d)) return "";
+    const d = parseInnergyDate(iso);
+    if (!d) return "";
     return d.toLocaleString(undefined, { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" });
   }
 
@@ -436,7 +445,8 @@
 
     const meta = document.createElement("div");
     meta.className = "icn-meta";
-    meta.appendChild(Object.assign(document.createElement("span"), { textContent: fmtTime(it.created) }));
+    const when = fmtTime(it.created);
+    meta.appendChild(Object.assign(document.createElement("span"), { textContent: when, title: when ? "Created " + when : "" }));
     if (isNote(it)) {
       const prev = document.createElement("span");
       prev.className = "icn-act"; prev.textContent = "Preview";

@@ -3,6 +3,26 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.20.0] - 2026-10-26
+### Fixed
+- Notifications sidebar: task **due dates** and the notification **created timestamps**
+  were blank. Innergy sends datetimes with a short UTC offset like `-04` (no minutes),
+  which the browser rejected as an invalid date. These now parse correctly, so the due
+  date/time shows on tasks and every notification shows when it was created.
+- Note deep-links: fixed the occasional **off-target / jumpy scroll** when opening a
+  note. A note whose text didn't immediately match made the list re-scroll on every DOM
+  change and never settle. The list scroll-search now runs at most once per note, and
+  after landing, the view re-centers a few times as content loads (so the aim is right)
+  and stops the moment you scroll yourself.
+
+### Added
+- Options: a **Reload extension** button (with a 3-2-1 countdown and a heads-up that the
+  Options page closes). Options **reopens automatically after a reload** — opt out with
+  the checkbox at the top ("Reopen this Options page after a reload").
+- Options → Updates: **Auto-update InnerCider when Chrome is quit and reopened** (opt-in,
+  off by default). On each Chrome launch it pulls the latest for the tracked branch via
+  the helper and reloads only if the version changed.
+
 ## [1.19.5] - 2026-10-26
 ### Fixed
 - Windows file-path links no longer change the on-screen layout. The link used to add
