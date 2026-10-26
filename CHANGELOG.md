@@ -3,6 +3,15 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.19.5] - 2026-10-26
+### Fixed
+- Windows file-path links no longer change the on-screen layout. The link used to add
+  a 📁 icon and let the path wrap, so paths that normally clip to one line in a grid
+  cell expanded into multi-line rows (overlapping/jumbled task lists). Links are now
+  rendered in place with no added characters and inherit the cell's own clipping, so
+  the list looks exactly as it did before — the full path is still in the link target
+  even when the visible text is clipped. A blue underline appears only on hover.
+
 ## [1.19.4] - 2026-10-21
 ### Fixed
 - One-click update failing with `CERTIFICATE_VERIFY_FAILED` on macOS. python.org

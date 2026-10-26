@@ -100,13 +100,9 @@
     a.dataset.icNative = path;              // raw drive path (Windows open / clipboard)
     a.dataset.icSmb = smbUrlFor(path);      // smb:// URL (Mac/Linux open)
     a.title = (isWindows ? "Open in File Explorer" : "Open in Finder") + " — " + path;
-    const ico = document.createElement("span");
-    ico.className = "ic-path-ico";
-    ico.textContent = "📁";
-    const txt = document.createElement("span");
-    txt.className = "ic-path-text";
-    txt.textContent = path;
-    a.append(ico, txt);
+    // Exactly the original text — no icon, no added characters. The href carries
+    // the full path even when the cell clips what's visible.
+    a.textContent = path;
     return a;
   }
 
@@ -116,11 +112,13 @@
     const st = document.createElement("style");
     st.id = "ic-path-style";
     st.textContent = `
-      .ic-path-link{cursor:pointer;color:#1a56db;text-decoration:none;white-space:normal}
-      .ic-path-link .ic-path-ico{margin-right:3px;font-size:.9em;text-decoration:none}
-      .ic-path-link .ic-path-text{text-decoration:underline;text-decoration-style:dotted;
-        text-underline-offset:2px;word-break:break-all}
-      .ic-path-link:hover .ic-path-text{text-decoration-style:solid}
+      /* Linkify in place WITHOUT changing layout: inherit the cell's own text
+         flow/clipping and colour so the list looks identical to plain text.
+         Only a hover affordance (pointer + blue underline) reveals the link,
+         and neither property changes the line box, so rows can't grow. */
+      .ic-path-link{cursor:pointer;color:inherit;text-decoration:none;
+        white-space:inherit;word-break:inherit;overflow-wrap:inherit}
+      .ic-path-link:hover{color:#1a56db;text-decoration:underline}
       .ic-path-toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);
         z-index:2147483600;background:#1f2937;color:#fff;padding:9px 16px;border-radius:9px;
         font:13px/1.3 -apple-system,Segoe UI,Roboto,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.35);
