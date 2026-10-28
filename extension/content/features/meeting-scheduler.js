@@ -52,12 +52,15 @@
   // "Page-turn: Project Name - Work Order Name (Work Order Number)", dropping any
   // part we don't have.
   function cleanProject(s) { return String(s || "").replace(/^P-\d+-\d+\s*-\s*/i, "").trim(); }
-  function buildSubject(sel, projectName) {
-    const proj = cleanProject(projectName || sel.project || "");
-    const name = (sel.name || "").trim();
-    const num = (sel.number || "").trim();
-    const wo = name && num && name !== num ? `${name} (${num})` : (name || num || sel.label || "Work Order");
-    return "Page-turn: " + (proj ? proj + " - " : "") + wo;
+  function buildSubjectMulti(items, projectName) {
+    const proj = cleanProject(projectName || (items[0] && items[0].project) || "");
+    if (items.length === 1) {
+      const s = items[0];
+      const wo = s.name && s.number && s.name !== s.number ? `${s.name} (${s.number})` : (s.name || s.number || s.label || "Work Order");
+      return "Page-turn: " + (proj ? proj + " - " : "") + wo;
+    }
+    const names = items.map((i) => i.name || i.number || i.label).filter(Boolean).join(", ");
+    return "Page-turn: " + (proj ? proj + " - " : "") + names;
   }
   function projIdFromHash() { const m = (location.hash || "").match(/projects\/([0-9a-fA-F-]{20,})/); return m ? m[1] : ""; }
   async function fetchProjectName(projId) {
@@ -158,16 +161,28 @@
 
   // Floating button on a WO grid when exactly one WO is checked.
   function fab() { return document.getElementById("ic-meet-fab"); }
+  // Count of valid selected WOs (1 single, N for a same-project multi), or 0 when
+  // nothing qualifies (none selected, or a mixed-project multi-selection).
+  function selCount() {
+    const s = selection;
+    if (!enabled || !s || s.mixed) return 0;
+    if (s.url) return 1;
+    if (s.items && s.items.length) return s.items.length;
+    return 0;
+  }
   function applyFab() {
-    const single = enabled && selection && selection.url;
-    if (!single) { const f = fab(); if (f) f.remove(); return; }
-    if (fab()) return;
+    const n = selCount();
+    if (!n) { const f = fab(); if (f) f.remove(); return; }
     ensureStyle();
-    const b = document.createElement("button");
-    b.id = "ic-meet-fab";
-    b.innerHTML = CAL_SVG + "<span>Schedule page turn</span>";
-    b.addEventListener("click", () => openModal());
-    document.body.appendChild(b);
+    let b = fab();
+    if (!b) {
+      b = document.createElement("button");
+      b.id = "ic-meet-fab";
+      b.addEventListener("click", () => openModal());
+      document.body.appendChild(b);
+    }
+    const label = n > 1 ? `Schedule page turn · ${n} WOs` : "Schedule page turn";
+    if (b.dataset.icLabel !== label) { b.dataset.icLabel = label; b.innerHTML = CAL_SVG + "<span>" + label + "</span>"; }
   }
 
   // Discrete button on the WO detail page, centered between Created By / Modified By.
@@ -222,11 +237,14 @@
   function closeModal() { const o = document.getElementById("ic-meet-overlay"); if (o) o.remove(); M = null; }
 
   async function openModal(ctxArg) {
-    const sel = ctxArg && ctxArg.url ? ctxArg : selection;
-    if (!sel || !sel.url) return;
+    const sel = ctxArg && (ctxArg.url || ctxArg.items) ? ctxArg : selection;
+    if (!sel || sel.mixed || (!sel.url && !(sel.items && sel.items.length))) return;
     ensureStyle();
     closeModal();
-    const woUrl = fullUrl(sel.url);
+    const items = sel.items && sel.items.length ? sel.items : [sel];
+    const multi = items.length > 1;
+    const project = sel.project || (items[0] && items[0].project) || "";
+    const woUrl = fullUrl(items[0].url);
     const overlay = document.createElement("div");
     overlay.id = "ic-meet-overlay";
     overlay.addEventListener("click", (e) => { if (e.target === overlay) closeModal(); });
@@ -234,7 +252,7 @@
 <div id="ic-meet-card">
   <div class="mh"><h2>Schedule page-turn meeting</h2><button class="mx" title="Close">×</button></div>
   <div class="mb">
-    <div class="ctx">Work order: <a class="wo" target="_blank" rel="noopener"></a></div>
+    <div class="ctx"></div>
     <label class="fl">Subject</label>
     <input type="text" class="subj" />
     <div class="row">
@@ -267,24 +285,43 @@
         card: q("#ic-meet-card"), subj: q(".subj"), date: q(".date"), time: q(".time"), dur: q(".dur"),
         chips: q(".ic-chips.att"), attInput: q(".ic-chips.att input"), ac: q(".ic-ac"),
         room: q(".room"), sa: q(".ic-sa"), legend: q(".ic-sa-legend"), body: q(".body"),
-        msg: q(".mf .msg"), go: q(".mf .go"), woLink: q(".wo"),
+        msg: q(".mf .msg"), go: q(".mf .go"), ctx: q(".ctx"),
       },
     };
     const E = M.el;
-    E.woLink.textContent = sel.label || woUrl;
-    E.woLink.href = woUrl;
-    E.subj.value = buildSubject(sel, sel.project || "");
+    // Context: one WO link, or a project-grouped list for multiple.
+    E.ctx.innerHTML = "";
+    if (multi) {
+      E.ctx.appendChild(Object.assign(document.createElement("div"),
+        { textContent: items.length + " work orders · " + (cleanProject(project) || "same project"), style: "font-weight:600;margin-bottom:4px" }));
+      for (const it of items) {
+        const a = document.createElement("a");
+        a.href = fullUrl(it.url); a.target = "_blank"; a.rel = "noopener";
+        a.textContent = (it.name || it.label) + (it.number ? " (" + it.number + ")" : "");
+        a.style.cssText = "display:block;color:#1a56db;word-break:break-all";
+        E.ctx.appendChild(a);
+      }
+    } else {
+      E.ctx.appendChild(Object.assign(document.createElement("span"), { textContent: "Work order: " }));
+      const a = document.createElement("a");
+      a.href = woUrl; a.target = "_blank"; a.rel = "noopener"; a.textContent = items[0].label || woUrl;
+      a.style.color = "#1a56db";
+      E.ctx.appendChild(a);
+    }
+    E.subj.value = buildSubjectMulti(items, project);
     E.subj.addEventListener("input", () => { if (M) M.subjEdited = true; });
-    // Project name isn't a column on the project-scoped grid — fill it in from the
+    // Project name isn't a column on the project-scoped grid — fill it from the
     // picker, unless the user has already tweaked the subject.
-    if (!sel.project) {
+    if (!project && !multi) {
       fetchProjectName(projIdFromHash()).then((pn) => {
-        if (pn && M && !M.subjEdited) M.el.subj.value = buildSubject(sel, pn);
+        if (pn && M && !M.subjEdited) M.el.subj.value = buildSubjectMulti(items, pn);
       });
     }
     E.date.value = todayStr();
     E.time.value = nextHalfHour();
-    E.body.value = `Page-turn review for work order ${sel.label || ""}.\n\nWork order: ${woUrl}\n`;
+    E.body.value = multi
+      ? "Page-turn review for the following work orders:\n\n" + items.map((it) => `• ${it.name || it.label}${it.number ? " (" + it.number + ")" : ""}: ${fullUrl(it.url)}`).join("\n") + "\n"
+      : `Page-turn review for work order ${items[0].label || ""}.\n\nWork order: ${woUrl}\n`;
 
     q(".mx").addEventListener("click", closeModal);
     q(".cancel").addEventListener("click", closeModal);
@@ -503,12 +540,14 @@
     const startD = new Date(startISO);
     const endD = new Date(startD.getTime() + Number(E.dur.value) * 60000);
     const endISO = `${endD.getFullYear()}-${pad(endD.getMonth() + 1)}-${pad(endD.getDate())}T${pad(endD.getHours())}:${pad(endD.getMinutes())}:00`;
+    const autoRecord = await new Promise((r) => chrome.storage.local.get("meetingAutoRecord", (d) => r(d.meetingAutoRecord !== false)));
     const meeting = {
       subject: E.subj.value.trim() || "Page Turn",
       bodyHtml: toHtmlBody(E.body.value, M.woUrl),
       startISO, endISO, timeZone: tzName(),
       attendees: M.att.map((em) => ({ email: em })),
       roomEmail: roomEmail(), roomName: roomName(),
+      autoRecord,
     };
     E.go.disabled = true; setMsg("Creating the meeting…", false);
     const r = await send("MEETING_CREATE", { meeting });
@@ -525,7 +564,11 @@
     body.innerHTML = `<div class="ic-done"><div style="font-size:40px">✅</div>
       <div style="font-size:15px;font-weight:700;margin-top:4px">Meeting created &amp; invites sent</div>
       <div style="color:#475569;margin-top:4px">The Teams invite is on your calendar and sent to the attendees${M.el.room.value ? " and room" : ""}.</div>
+      <div class="ic-rec"></div>
       <div></div></div>`;
+    const rec = body.querySelector(".ic-rec");
+    if (mtg.autoRecord === true) { rec.textContent = "🔴 Auto-recording & transcription are on — AI notes will be generated."; rec.style.cssText = "color:#157347;margin-top:6px;font-size:12.5px"; }
+    else if (mtg.autoRecordError) { rec.textContent = "Note: couldn't enable auto-recording (" + mtg.autoRecordError + "). The meeting is still created."; rec.style.cssText = "color:#b45309;margin-top:6px;font-size:12px"; }
     const wrap = body.querySelector(".ic-done div:last-child");
     if (mtg.joinUrl) { const a = document.createElement("a"); a.className = "j"; a.href = mtg.joinUrl; a.target = "_blank"; a.rel = "noopener"; a.textContent = "Join Teams meeting"; wrap.appendChild(a); }
     if (mtg.webLink) { const a = document.createElement("a"); a.className = "j alt"; a.href = mtg.webLink; a.target = "_blank"; a.rel = "noopener"; a.textContent = "Open in Outlook"; wrap.appendChild(a); }

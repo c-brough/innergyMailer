@@ -621,6 +621,16 @@
             <input type="checkbox" id="meeting-scheduler-enabled" />
             Show the "Schedule page-turn meeting" button on Work-Order grids
           </label>
+          <label class="opt">
+            <input type="checkbox" id="meeting-auto-record" />
+            Auto-record &amp; transcribe meetings (AI notes) by default
+          </label>
+          <p class="fs-note" style="margin-top:4px">
+            Turns on automatic recording + transcription when the meeting starts (which drives
+            Teams AI notes / recap). Needs <code>OnlineMeetings.ReadWrite</code> consent and your
+            tenant's recording/transcription + Copilot policy; the meeting is still created if it
+            can't be enabled.
+          </p>
 
           <div style="margin-top:6px;padding:11px 13px;background:#fff7ed;border:1px solid #fed7aa;border-radius:9px">
             <div style="font-size:12.5px;font-weight:700;color:#9a3412;margin-bottom:6px">One-time Microsoft setup</div>
@@ -633,10 +643,12 @@
               <li><code>People.Read</code> — 365 contacts autocomplete</li>
               <li><code>User.Read</code> — identify you as the organizer</li>
               <li><code>Place.Read.All</code> — list Teams Rooms <strong>(needs admin consent)</strong></li>
+              <li><code>OnlineMeetings.ReadWrite</code> — auto-record / transcribe for AI notes</li>
             </ul>
             <p class="fs-note" style="margin-top:0">
-              Rooms won't list until an M365 admin consents to <code>Place.Read.All</code>. The
-              verifier below tells you exactly what's working.
+              Rooms won't list until an M365 admin consents to <code>Place.Read.All</code>. After
+              adding scopes, click <strong>Connect &amp; verify access</strong> again to re-consent.
+              The verifier below tells you exactly what's working.
             </p>
           </div>
 

@@ -52,49 +52,55 @@
     if (typeof v === "object") return String(v.DisplayName || v.Title || "").trim();
     return String(v).trim();
   }
-  const GUID = /^[0-9a-f]{8}-[0-9a-f-]{27}$/i;
-  // First field whose key matches `re` and holds usable display text (prefers a
-  // link object's DisplayName; skips raw GUIDs).
-  function scan(d, re) {
-    let best = "";
-    for (const k of Object.keys(d || {})) {
-      if (!re.test(k)) continue;
-      const v = d[k], s = textOf(v);
-      if (!s || GUID.test(s)) continue;
-      if (v && typeof v === "object" && (v.DisplayName || v.Title)) return s;
-      if (!best) best = s;
-    }
-    return best;
+  function projIdOf(url) { const m = String(url || "").match(/projects\/([0-9a-fA-F-]{20,})/i); return m ? m[1] : ""; }
+
+  // Extract one work order from a grid row. The WO grids expose Name (WO name +
+  // detail URL), SequenceIdentifier (WO number) and Project (project name + URL)
+  // as Innergy link objects; fall back to the first WO-ish link cell otherwise.
+  function woFromRow(d) {
+    if (!d || typeof d !== "object") return null;
+    const name = d.Name && typeof d.Name === "object" && d.Name.Url ? d.Name : null;
+    const seq = d.SequenceIdentifier && typeof d.SequenceIdentifier === "object" ? d.SequenceIdentifier : null;
+    const proj = d.Project && typeof d.Project === "object" ? d.Project : null;
+    const link = name || linkCell(d);
+    if (!link || !link.Url) return null;
+    return {
+      url: link.Url,
+      label: (name && name.DisplayName) || link.DisplayName || link.Title || "Work Order",
+      id: (name && name.ObjectId) || link.ObjectId || null,
+      number: (seq && textOf(seq)) || "",
+      name: (name && name.DisplayName) || link.DisplayName || "",
+      project: (proj && textOf(proj)) || "",
+      projectId: projIdOf((proj && proj.Url) || link.Url),
+    };
   }
 
   function fromGrid() {
     for (const g of gridInstances()) {
       let sel;
       try { sel = g.getSelectedRowsData(); } catch (e) { continue; }
-      if (!Array.isArray(sel)) continue;
-      if (sel.length > 1) return { multi: sel.length };
-      if (sel.length === 1) {
-        const d = sel[0];
-        const lc = linkCell(d);
-        if (!lc) continue;
-        const label = lc.DisplayName || lc.Title || "Work Order";
-        const number = scan(d, /^number$|wo.?number|workordernumber|^no$/i) || (/\d/.test(label) ? label : "");
-        const name = scan(d, /^name$|description|^title$|workordername/i);
-        const project = scan(d, /project/i);
-        return { url: lc.Url, label, id: lc.ObjectId || null, number, name, project };
+      if (!Array.isArray(sel) || !sel.length) continue;
+      const items = sel.map(woFromRow).filter(Boolean);
+      if (!items.length) continue;
+      if (items.length === 1) {
+        const it = items[0];
+        return { url: it.url, label: it.label, id: it.id, number: it.number, name: it.name, project: it.project, projectId: it.projectId };
       }
+      // Multiple WOs: only qualify when every one shares the same parent project.
+      const pid = items[0].projectId;
+      if (!pid || !items.every((it) => it.projectId === pid)) return { multi: items.length, mixed: true };
+      return { multi: items.length, items, project: items[0].project, projectId: pid };
     }
     return null;
   }
 
-  // Fallback: DevExtreme marks a checkbox-selected row with .dx-selection.
+  // Fallback: DevExtreme marks a checkbox-selected row with .dx-selection. Only
+  // handles a single selection; multi-select routes through the grid data above.
   function fromDom() {
     const rows = document.querySelectorAll("tr.dx-data-row.dx-selection, tr.dx-selection");
-    if (rows.length > 1) return { multi: rows.length };
-    if (rows.length === 1) {
-      const a = rows[0].querySelector('a[href*="workOrder"], a[href*="/workOrders/"], a[href*="#/"]');
-      if (a) return { url: a.getAttribute("href"), label: (a.textContent || "Work Order").trim(), id: null };
-    }
+    if (rows.length !== 1) return rows.length > 1 ? { multi: rows.length } : null;
+    const a = rows[0].querySelector('a[href*="workOrder"], a[href*="/workOrders/"], a[href*="#/"]');
+    if (a) return { url: a.getAttribute("href"), label: (a.textContent || "Work Order").trim(), id: null, projectId: projIdOf(a.getAttribute("href")) };
     return null;
   }
 

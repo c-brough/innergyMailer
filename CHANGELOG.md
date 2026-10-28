@@ -3,6 +3,21 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.23.0] - 2026-10-28
+### Added (meeting scheduler)
+- **Multiple work orders** can now be scheduled in one page-turn meeting — but only when
+  every selected WO shares the **same parent project**. The button shows a count
+  ("Schedule page turn · 3 WOs") for a valid multi-select and **stays hidden** if the
+  selection spans different projects. The modal lists each WO (name + number + link) and
+  puts them all in the invite body.
+- Grid fields are now read precisely (Name / SequenceIdentifier / Project), so the subject
+  fills correctly from the grid too: "Page-turn: <Project> - <name> (<number>)".
+- **Auto-record & transcribe (AI notes)**, on by default: new meetings turn on automatic
+  recording + transcription (which drives Teams AI notes / recap). Needs the new
+  `OnlineMeetings.ReadWrite` consent (re-run Connect & verify) and your tenant's recording +
+  Copilot policy; the meeting is still created if recording can't be enabled. Toggle under
+  Options → Meetings.
+
 ## [1.22.4] - 2026-10-27
 ### Changed (meeting scheduler)
 - The grid "Schedule page turn" button now uses the same **discrete** style as the one on

@@ -638,6 +638,10 @@ fpNativeBox.addEventListener("change", (e) => {
   chrome.storage.local.get("meetingSchedulerEnabled", (d) => { enBox.checked = d.meetingSchedulerEnabled === true; }); // opt-in, default off
   enBox.addEventListener("change", (e) => { chrome.storage.local.set({ meetingSchedulerEnabled: e.target.checked }); showSaved(); });
 
+  const recBox = document.getElementById("meeting-auto-record");
+  chrome.storage.local.get("meetingAutoRecord", (d) => { recBox.checked = d.meetingAutoRecord !== false; }); // default on
+  recBox.addEventListener("change", (e) => { chrome.storage.local.set({ meetingAutoRecord: e.target.checked }); showSaved(); });
+
   chrome.storage.local.get("meetingDefaultAttendees", (d) => {
     if (Array.isArray(d.meetingDefaultAttendees)) defAtt.value = d.meetingDefaultAttendees.join("\n");
   });

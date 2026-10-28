@@ -29,7 +29,8 @@ const KEY = "graphIdentityToken";
 const G = "https://graph.microsoft.com/";
 const MEETING_SCOPES =
   "offline_access openid " +
-  G + "User.Read " + G + "Calendars.ReadWrite " + G + "People.Read " + G + "Place.Read.All";
+  G + "User.Read " + G + "Calendars.ReadWrite " + G + "People.Read " +
+  G + "Place.Read.All " + G + "OnlineMeetings.ReadWrite";
 const MEETING_KEY = "graphMeetingToken";
 
 function b64url(bytes) {

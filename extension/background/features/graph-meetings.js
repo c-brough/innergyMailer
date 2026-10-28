@@ -122,11 +122,29 @@ async function createMeeting(token, m) {
   };
   if (m.roomEmail) event.location = { displayName: m.roomName || m.roomEmail, locationEmailAddress: m.roomEmail };
   const j = await gfetch(token, "/me/events", { method: "POST", body: JSON.stringify(event) });
-  return {
+  const out = {
     id: j.id,
     webLink: j.webLink || "",
     joinUrl: (j.onlineMeeting && j.onlineMeeting.joinUrl) || "",
   };
+  // Optionally turn on auto-record (which also drives transcription / AI recap,
+  // subject to tenant policy + Copilot licensing). Best-effort: the meeting is
+  // already created, so a failure here is reported, not fatal.
+  if (m.autoRecord && out.joinUrl) {
+    try { await enableAutoRecord(token, out.joinUrl); out.autoRecord = true; }
+    catch (e) { out.autoRecord = false; out.autoRecordError = String((e && e.message) || e); }
+  }
+  return out;
+}
+
+// Enable automatic recording on the event's Teams meeting by locating the
+// onlineMeeting via its join URL and PATCHing recordAutomatically.
+async function enableAutoRecord(token, joinUrl) {
+  const filter = "JoinWebUrl eq '" + joinUrl.replace(/'/g, "''") + "'";
+  const found = await gfetch(token, "/me/onlineMeetings?$filter=" + encodeURIComponent(filter));
+  const mtg = found && found.value && found.value[0];
+  if (!mtg || !mtg.id) throw new Error("couldn't find the Teams meeting to enable recording");
+  await gfetch(token, "/me/onlineMeetings/" + mtg.id, { method: "PATCH", body: JSON.stringify({ recordAutomatically: true }) });
 }
 
 // ---- message handlers -------------------------------------------------------
