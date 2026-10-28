@@ -3,6 +3,16 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.22.3] - 2026-10-27
+### Added (meeting scheduler)
+- A discrete **"Schedule page turn"** button now appears on a **work order's detail page**
+  (`…/workOrder/<id>/details`), centered between **Created By** and **Modified By** at the
+  bottom. It opens the same scheduling modal, with the work order's URL in the body and the
+  subject filled from the page (project / name / number — verified live, e.g.
+  "Page-turn: RWG PO#55555 TEST - desk (P-26-1050-003p)").
+- Confirmed the project name resolves from `ProjectsPickerQuery` by the page's project id,
+  so the subject's project part is now reliable on both the grid and the detail page.
+
 ## [1.22.2] - 2026-10-27
 ### Changed (meeting scheduler)
 - Auto-filled subject is now **"Page-turn: Project Name - Work Order Name (Work Order

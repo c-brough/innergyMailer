@@ -25,6 +25,7 @@
   // Higher-contrast but harmonious: green / amber / coral / violet / steel.
   const AV_COLOR = { "0": "#5fb98e", "1": "#f2b441", "2": "#e07a6b", "3": "#9b84cf", "4": "#8098b3" };
   const AV_LABEL = { "0": "Free", "1": "Tentative", "2": "Busy", "3": "Out of office", "4": "Working elsewhere" };
+  const DETAIL_RE = /#\/projects\/[0-9a-fA-F-]{20,}\/workOrder\/([0-9a-fA-F-]{20,})\/details/i;
 
   let enabled = false; // opt-in: off until turned on in Options
   chrome.storage.local.get("meetingSchedulerEnabled", (d) => { enabled = d.meetingSchedulerEnabled === true; apply(); });
@@ -94,6 +95,12 @@
   font:13px/1.2 -apple-system,Segoe UI,Roboto,sans-serif;font-weight:600;box-shadow:0 6px 20px rgba(26,86,219,.45)}
 #ic-meet-fab:hover{background:#1646b8}
 #ic-meet-fab svg{width:18px;height:18px;fill:#fff}
+.ic-meet-detail-btn{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2;
+  display:inline-flex;align-items:center;gap:6px;background:#fff;color:#1a56db;border:1px solid #c7d0f8;
+  border-radius:16px;cursor:pointer;padding:5px 12px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.08);
+  font:600 12px/1 -apple-system,Segoe UI,Roboto,sans-serif}
+.ic-meet-detail-btn:hover{background:#1a56db;color:#fff;border-color:#1a56db}
+.ic-meet-detail-btn svg{width:14px;height:14px;fill:currentColor}
 #ic-meet-overlay{position:fixed;inset:0;z-index:2147483601;background:rgba(15,23,42,.5);display:flex;align-items:center;
   justify-content:center;font:13px/1.45 -apple-system,Segoe UI,Roboto,sans-serif;animation:icMeetFade .18s ease-out}
 @keyframes icMeetFade{from{opacity:0}to{opacity:1}}
@@ -146,9 +153,12 @@
 
   const CAL_SVG = "<svg viewBox='0 0 24 24'><path d='M7 2v2H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7zm12 6v11H5V8h14z'/></svg>";
 
-  // ---- floating button -------------------------------------------------------
+  // ---- triggers --------------------------------------------------------------
+  function apply() { applyFab(); applyDetailBtn(); }
+
+  // Floating button on a WO grid when exactly one WO is checked.
   function fab() { return document.getElementById("ic-meet-fab"); }
-  function apply() {
+  function applyFab() {
     const single = enabled && selection && selection.url;
     if (!single) { const f = fab(); if (f) f.remove(); return; }
     if (fab()) return;
@@ -156,8 +166,49 @@
     const b = document.createElement("button");
     b.id = "ic-meet-fab";
     b.innerHTML = CAL_SVG + "<span>Schedule page-turn meeting</span>";
-    b.addEventListener("click", openModal);
+    b.addEventListener("click", () => openModal());
     document.body.appendChild(b);
+  }
+
+  // Discrete button on the WO detail page, centered between Created By / Modified By.
+  function commonAncestor(a, b) {
+    const anc = []; let p = a;
+    while (p) { anc.push(p); p = p.parentElement; }
+    p = b; while (p) { if (anc.includes(p)) return p; p = p.parentElement; }
+    return null;
+  }
+  function applyDetailBtn() {
+    const on = enabled && DETAIL_RE.test(location.hash || "");
+    if (!on) { const e = document.getElementById("ic-meet-detail-btn"); if (e) e.remove(); return; }
+    if (document.getElementById("ic-meet-detail-btn")) return; // already placed
+    const spans = [...document.querySelectorAll("span.bold")].filter((s) => /created by:|modified by:/i.test(s.textContent || ""));
+    if (spans.length < 2) return; // footer not rendered yet
+    const row = commonAncestor(spans[0], spans[1]);
+    if (!row) return;
+    ensureStyle();
+    if (getComputedStyle(row).position === "static") row.style.position = "relative";
+    const b = document.createElement("button");
+    b.id = "ic-meet-detail-btn";
+    b.className = "ic-meet-detail-btn";
+    b.title = "Schedule a page-turn meeting for this work order";
+    b.innerHTML = CAL_SVG + "<span>Schedule page turn</span>";
+    b.addEventListener("click", openModalFromDetail);
+    row.appendChild(b);
+  }
+
+  // Build the meeting context from the WO detail page and open the modal.
+  async function openModalFromDetail() {
+    const woId = ((location.hash || "").match(DETAIL_RE) || [])[1] || null;
+    let number = "", name = "";
+    // Header is "<WO number> - <WO name>", e.g. "P-26-1050-003p - desk". The WO
+    // number's own hyphens aren't spaced, so split only on a spaced " - ".
+    for (const el of document.querySelectorAll("div,span,h1,h2,h3")) {
+      const own = [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.nodeValue).join("").trim();
+      const mm = own.match(/^(P-\d+-\d+\S*)\s+-\s+(.+)$/);
+      if (mm && own.length < 70) { number = mm[1]; name = mm[2].trim(); break; }
+    }
+    const project = await fetchProjectName(projIdFromHash());
+    openModal({ url: location.href, label: name || number || "Work Order", id: woId, number, name, project });
   }
 
   // ---- modal -----------------------------------------------------------------
@@ -170,11 +221,11 @@
 
   function closeModal() { const o = document.getElementById("ic-meet-overlay"); if (o) o.remove(); M = null; }
 
-  async function openModal() {
-    if (!selection || !selection.url) return;
+  async function openModal(ctxArg) {
+    const sel = ctxArg && ctxArg.url ? ctxArg : selection;
+    if (!sel || !sel.url) return;
     ensureStyle();
     closeModal();
-    const sel = selection;
     const woUrl = fullUrl(sel.url);
     const overlay = document.createElement("div");
     overlay.id = "ic-meet-overlay";
