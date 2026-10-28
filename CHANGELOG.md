@@ -3,6 +3,21 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.21.0] - 2026-10-27
+### Added (preview — Meetings foundation)
+- Groundwork for a Teams/Outlook **page-turn meeting** workflow, built on the existing
+  Microsoft sign-in (same Azure Client ID) via a separate meeting-scoped token so it
+  never disturbs mail-send users. Graph plumbing for: 365-contacts autocomplete
+  (`People.Read`), attendee/room free-busy (`getSchedule`), Teams Rooms list
+  (`Place.Read.All`), and Teams meeting creation (`Calendars.ReadWrite`).
+- Options → **Meetings (Teams / Outlook)**: a "Connect & verify access" button that signs
+  in and reports exactly which capabilities the tenant allows — surfacing the one-time
+  Azure permission adds and the **admin consent needed for rooms** (`Place.Read.All`).
+  Also a default-attendees list that will pre-fill every meeting.
+- Note: the work-order grid trigger and the scheduling modal (recipients, scheduling
+  assistant, room picker) are the next increment — this release proves the Graph access
+  so that UI is built on verified calls.
+
 ## [1.20.0] - 2026-10-26
 ### Fixed
 - Notifications sidebar: task **due dates** and the notification **created timestamps**

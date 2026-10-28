@@ -606,6 +606,50 @@
       </div>
     </details>
 
+    <!-- ===== Meetings (Teams/Outlook) ============================= -->
+    <details class="cat" data-cat="meetings">
+      <summary>Meetings (Teams / Outlook) <span class="cat-tag">preview</span></summary>
+      <div class="cat-body">
+        <fieldset id="fs-meetings">
+          <p class="fs-note">
+            Schedule a Teams/Outlook <strong>page-turn meeting</strong> from a work order, using
+            the same Microsoft sign-in (Azure Client ID) as the mail features. Recipients
+            autocomplete from your <strong>365 contacts</strong>, you can see attendee and room
+            availability, and the work-order link drops into the invite body.
+          </p>
+
+          <div style="margin-top:6px;padding:11px 13px;background:#fff7ed;border:1px solid #fed7aa;border-radius:9px">
+            <div style="font-size:12.5px;font-weight:700;color:#9a3412;margin-bottom:6px">One-time Microsoft setup</div>
+            <p class="fs-note" style="margin-top:0">
+              In your Azure app registration (same Client ID), add these <strong>delegated</strong>
+              Microsoft Graph permissions, then grant consent:
+            </p>
+            <ul style="margin:6px 0 6px 18px;padding:0;font-size:12.5px;line-height:1.5">
+              <li><code>Calendars.ReadWrite</code> — create the meeting + read free/busy</li>
+              <li><code>People.Read</code> — 365 contacts autocomplete</li>
+              <li><code>User.Read</code> — identify you as the organizer</li>
+              <li><code>Place.Read.All</code> — list Teams Rooms <strong>(needs admin consent)</strong></li>
+            </ul>
+            <p class="fs-note" style="margin-top:0">
+              Rooms won't list until an M365 admin consents to <code>Place.Read.All</code>. The
+              verifier below tells you exactly what's working.
+            </p>
+          </div>
+
+          <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap">
+            <button type="button" id="meet-verify">Connect &amp; verify access</button>
+            <span id="meet-verify-status" style="font-size:12.5px;color:#667"></span>
+          </div>
+          <div id="meet-verify-results" style="margin-top:8px;font-size:12.5px"></div>
+
+          <label for="meet-default-attendees" style="display:block;margin-top:14px;font-weight:600;font-size:12.5px">Default attendees (always invited)</label>
+          <p class="fs-note" style="margin-top:2px">One email per line — these pre-fill every new meeting.</p>
+          <textarea id="meet-default-attendees" rows="3" placeholder="chris@ciderpresswoodworks.com&#10;pm@ciderpresswoodworks.com"
+            style="width:100%;box-sizing:border-box;font:13px monospace;padding:7px 9px;border:1px solid #ccc;border-radius:7px"></textarea>
+        </fieldset>
+      </div>
+    </details>
+
     <!-- ===== Notifications sidebar ================================ -->
     <details class="cat" data-cat="notifications">
       <summary>Notifications sidebar <span class="cat-tag">opt-in</span></summary>

@@ -627,6 +627,70 @@ fpNativeBox.addEventListener("change", (e) => {
   }
 })();
 
+// ---- Meetings (Teams/Outlook) ------------------------------------------------
+(() => {
+  const verifyBtn = document.getElementById("meet-verify");
+  const vStatus = document.getElementById("meet-verify-status");
+  const vResults = document.getElementById("meet-verify-results");
+  const defAtt = document.getElementById("meet-default-attendees");
+
+  chrome.storage.local.get("meetingDefaultAttendees", (d) => {
+    if (Array.isArray(d.meetingDefaultAttendees)) defAtt.value = d.meetingDefaultAttendees.join("\n");
+  });
+  let saveT;
+  defAtt.addEventListener("input", () => {
+    clearTimeout(saveT);
+    saveT = setTimeout(() => {
+      const list = defAtt.value.split(/[\n,;]+/).map((s) => s.trim()).filter((s) => /@/.test(s));
+      chrome.storage.local.set({ meetingDefaultAttendees: list });
+      showSaved();
+    }, 600);
+  });
+
+  function row(label, res) {
+    const ok = res && res.ok;
+    const color = ok ? "#157347" : "#b91c1c";
+    const mark = ok ? "✓" : "✕";
+    const detail = ok ? "" : ' <span style="color:#888">— ' + esc(String((res && res.error) || "unavailable")) + "</span>";
+    return `<div style="margin:3px 0"><span style="color:${color};font-weight:700">${mark}</span> ${esc(label)}${detail}</div>`;
+  }
+  function esc(s) { return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+  if (verifyBtn) {
+    verifyBtn.addEventListener("click", () => {
+      verifyBtn.disabled = true;
+      vStatus.style.color = "#667";
+      vStatus.textContent = "Opening Microsoft sign-in…";
+      vResults.innerHTML = "";
+      chrome.runtime.sendMessage({ type: "MEETING_VERIFY" }, (resp) => {
+        verifyBtn.disabled = false;
+        if (chrome.runtime.lastError || !resp) {
+          vStatus.style.color = "#b91c1c";
+          vStatus.textContent = "Couldn't reach the extension worker — reload the extension.";
+          return;
+        }
+        if (!resp.ok) {
+          vStatus.style.color = "#b91c1c";
+          vStatus.textContent = "Sign-in failed: " + (resp.error || "unknown error");
+          return;
+        }
+        const r = resp.result || {};
+        const who = r.user && r.user.email ? " as " + r.user.email : "";
+        vStatus.style.color = "#157347";
+        vStatus.textContent = "Signed in" + who + ".";
+        vResults.innerHTML =
+          row("Create Teams meeting + invite", r.createMeeting) +
+          row("365 contacts autocomplete", r.people) +
+          row("Attendee free/busy (scheduling assistant)", r.freeBusy) +
+          row("Teams Rooms list + availability", r.rooms) +
+          (r.rooms && !r.rooms.ok
+            ? '<div style="margin-top:6px;color:#9a3412">Rooms need an M365 admin to consent to <code>Place.Read.All</code> for this app.</div>'
+            : "");
+      });
+    });
+  }
+})();
+
 // ---- Notifications sidebar (opt-in) + default filters ------------------------
 // content/features/notifications-sidebar.js reads notifSidebarEnabled,
 // notifDefaultStatus and notifTypes ({notes,tasks,reports,other}).

@@ -27,6 +27,13 @@ import {
   handleOpenOptions,
 } from "./features/open-path.js";
 import { registerLifecycle } from "./features/lifecycle.js";
+import {
+  handleMeetingVerify,
+  handleMeetingPeopleSearch,
+  handleMeetingGetSchedule,
+  handleMeetingListRooms,
+  handleMeetingCreate,
+} from "./features/graph-meetings.js";
 
 registerLifecycle();
 
@@ -40,6 +47,11 @@ const handlers = {
   OPEN_LOCAL_PATH_NATIVE: handleOpenPathNative,
   PING_HOST: handlePingHost,
   OPEN_OPTIONS: handleOpenOptions,
+  MEETING_VERIFY: handleMeetingVerify,
+  MEETING_PEOPLE_SEARCH: handleMeetingPeopleSearch,
+  MEETING_GET_SCHEDULE: handleMeetingGetSchedule,
+  MEETING_LIST_ROOMS: handleMeetingListRooms,
+  MEETING_CREATE: handleMeetingCreate,
 };
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
