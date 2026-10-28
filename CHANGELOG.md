@@ -3,6 +3,24 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.22.0] - 2026-10-27
+### Added — Page-turn meeting scheduler
+- On a **Work-Order grid** (project grid or the global `#/workOrders/grid`), checking
+  exactly one work order shows a **"Schedule page-turn meeting"** button. It opens a
+  modal that creates a **Teams/Outlook meeting** via Microsoft Graph (same sign-in as
+  the mail features):
+  - **Recipients autocomplete from 365 contacts**; **default attendees** (Options)
+    pre-fill every meeting; type a raw email + Enter to add one.
+  - **Scheduling assistant**: a free/busy strip for attendees + the room over the chosen
+    day — click a slot to set the start time.
+  - **Room picker**: lists Teams Rooms and books the chosen one (added as a resource).
+  - Subject/date/time/duration + an invite **body pre-filled with the work-order URL**.
+  - Creating it sends the Teams invite to attendees (and the room) and shows the Join /
+    Open-in-Outlook links.
+- The single-selection + work-order URL are read from the DevExtreme grid in a MAIN-world
+  companion (self-describing link-cell detection with a DOM fallback). Opt out under
+  Options → Meetings. Needs the one-time Microsoft permissions from 1.21.0.
+
 ## [1.21.0] - 2026-10-27
 ### Added (preview — Meetings foundation)
 - Groundwork for a Teams/Outlook **page-turn meeting** workflow, built on the existing

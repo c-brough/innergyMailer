@@ -634,6 +634,10 @@ fpNativeBox.addEventListener("change", (e) => {
   const vResults = document.getElementById("meet-verify-results");
   const defAtt = document.getElementById("meet-default-attendees");
 
+  const enBox = document.getElementById("meeting-scheduler-enabled");
+  chrome.storage.local.get("meetingSchedulerEnabled", (d) => { enBox.checked = d.meetingSchedulerEnabled !== false; }); // default on
+  enBox.addEventListener("change", (e) => { chrome.storage.local.set({ meetingSchedulerEnabled: e.target.checked }); showSaved(); });
+
   chrome.storage.local.get("meetingDefaultAttendees", (d) => {
     if (Array.isArray(d.meetingDefaultAttendees)) defAtt.value = d.meetingDefaultAttendees.join("\n");
   });
@@ -978,12 +982,13 @@ notifTypeBoxes.forEach((cb) => cb.addEventListener("change", saveNotifTypes));
       case "note-drafts": return data.noteDraftsEnabled !== false;  // on by default
       case "co-wizard": return data.changeOrderWizardEnabled !== false; // on by default
       case "file-paths": return data.filePathLinksEnabled !== false; // on by default
+      case "meetings": return data.meetingSchedulerEnabled !== false; // on by default
       case "notifications": return data.notifSidebarEnabled === true;
       default: return false;                     // Updates: neutral
     }
   }
   function refresh() {
-    chrome.storage.local.get(["mailApp", "poEmailEnabled", "bomBaseUrl", "timeTrackingEnabled", "notesEnhancementsEnabled", "noteDraftsEnabled", "changeOrderWizardEnabled", "filePathLinksEnabled", "notifSidebarEnabled"], (data) => {
+    chrome.storage.local.get(["mailApp", "poEmailEnabled", "bomBaseUrl", "timeTrackingEnabled", "notesEnhancementsEnabled", "noteDraftsEnabled", "changeOrderWizardEnabled", "filePathLinksEnabled", "meetingSchedulerEnabled", "notifSidebarEnabled"], (data) => {
       cats.forEach((c) => c.classList.toggle("cat--on", isOn(c, data)));
       // Mail app gating.
       if (mailCat) {
@@ -996,7 +1001,7 @@ notifTypeBoxes.forEach((cb) => cb.addEventListener("change", saveNotifTypes));
   }
   refresh();
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === "local" && (changes.mailApp || changes.poEmailEnabled || changes.bomBaseUrl || changes.timeTrackingEnabled || changes.notesEnhancementsEnabled || changes.noteDraftsEnabled || changes.changeOrderWizardEnabled || changes.filePathLinksEnabled || changes.notifSidebarEnabled)) refresh();
+    if (area === "local" && (changes.mailApp || changes.poEmailEnabled || changes.bomBaseUrl || changes.timeTrackingEnabled || changes.notesEnhancementsEnabled || changes.noteDraftsEnabled || changes.changeOrderWizardEnabled || changes.filePathLinksEnabled || changes.meetingSchedulerEnabled || changes.notifSidebarEnabled)) refresh();
   });
 
   // Expand / collapse all (only categories currently shown; never expand a
