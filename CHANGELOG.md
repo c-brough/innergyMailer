@@ -3,6 +3,16 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.22.2] - 2026-10-27
+### Changed (meeting scheduler)
+- Auto-filled subject is now **"Page-turn: Project Name - Work Order Name (Work Order
+  Number)"** (parts omitted gracefully if unavailable; project name filled from the
+  picker on the project-scoped grid). Edit it freely — manual edits aren't overwritten.
+- Default **duration is now 30 minutes**, and a **15-minute** option was added.
+- Higher-contrast, complementary availability colors (green / amber / coral / violet /
+  steel) with stronger grid lines and a bolder selected-slot outline — clearer but still
+  easy on the eyes.
+
 ## [1.22.1] - 2026-10-27
 ### Changed
 - The page-turn meeting scheduler is now **opt-in (off by default)** — turn it on under

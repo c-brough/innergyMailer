@@ -46,6 +46,27 @@
     return best;
   }
 
+  // Display text of a cell value (link object → its DisplayName, else the scalar).
+  function textOf(v) {
+    if (v == null) return "";
+    if (typeof v === "object") return String(v.DisplayName || v.Title || "").trim();
+    return String(v).trim();
+  }
+  const GUID = /^[0-9a-f]{8}-[0-9a-f-]{27}$/i;
+  // First field whose key matches `re` and holds usable display text (prefers a
+  // link object's DisplayName; skips raw GUIDs).
+  function scan(d, re) {
+    let best = "";
+    for (const k of Object.keys(d || {})) {
+      if (!re.test(k)) continue;
+      const v = d[k], s = textOf(v);
+      if (!s || GUID.test(s)) continue;
+      if (v && typeof v === "object" && (v.DisplayName || v.Title)) return s;
+      if (!best) best = s;
+    }
+    return best;
+  }
+
   function fromGrid() {
     for (const g of gridInstances()) {
       let sel;
@@ -53,8 +74,14 @@
       if (!Array.isArray(sel)) continue;
       if (sel.length > 1) return { multi: sel.length };
       if (sel.length === 1) {
-        const lc = linkCell(sel[0]);
-        if (lc) return { url: lc.Url, label: lc.DisplayName || lc.Title || "Work Order", id: lc.ObjectId || null };
+        const d = sel[0];
+        const lc = linkCell(d);
+        if (!lc) continue;
+        const label = lc.DisplayName || lc.Title || "Work Order";
+        const number = scan(d, /^number$|wo.?number|workordernumber|^no$/i) || (/\d/.test(label) ? label : "");
+        const name = scan(d, /^name$|description|^title$|workordername/i);
+        const project = scan(d, /project/i);
+        return { url: lc.Url, label, id: lc.ObjectId || null, number, name, project };
       }
     }
     return null;

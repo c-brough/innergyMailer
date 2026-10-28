@@ -22,7 +22,8 @@
   const IC = window.InnerCider;
   const ORIGIN = "https://app.innergy.com";
   const DAY_START = 7, DAY_END = 19, SLOT_MIN = 30; // scheduling-assistant window
-  const AV_COLOR = { "0": "#e6f4ea", "1": "#fff4ce", "2": "#f8d7da", "3": "#e2d9f3", "4": "#e9ecef" };
+  // Higher-contrast but harmonious: green / amber / coral / violet / steel.
+  const AV_COLOR = { "0": "#5fb98e", "1": "#f2b441", "2": "#e07a6b", "3": "#9b84cf", "4": "#8098b3" };
   const AV_LABEL = { "0": "Free", "1": "Tentative", "2": "Busy", "3": "Out of office", "4": "Working elsewhere" };
 
   let enabled = false; // opt-in: off until turned on in Options
@@ -44,6 +45,30 @@
     if (/^https?:/i.test(u)) return u;
     if (u.charAt(0) === "#") return ORIGIN + "/" + u;
     return u.charAt(0) === "/" ? ORIGIN + u : ORIGIN + "/" + u;
+  }
+
+  // ---- subject --------------------------------------------------------------
+  // "Page-turn: Project Name - Work Order Name (Work Order Number)", dropping any
+  // part we don't have.
+  function cleanProject(s) { return String(s || "").replace(/^P-\d+-\d+\s*-\s*/i, "").trim(); }
+  function buildSubject(sel, projectName) {
+    const proj = cleanProject(projectName || sel.project || "");
+    const name = (sel.name || "").trim();
+    const num = (sel.number || "").trim();
+    const wo = name && num && name !== num ? `${name} (${num})` : (name || num || sel.label || "Work Order");
+    return "Page-turn: " + (proj ? proj + " - " : "") + wo;
+  }
+  function projIdFromHash() { const m = (location.hash || "").match(/projects\/([0-9a-fA-F-]{20,})/); return m ? m[1] : ""; }
+  async function fetchProjectName(projId) {
+    if (!projId) return "";
+    try {
+      const r = await fetch(ORIGIN + "/query/run?query=" + encodeURIComponent(JSON.stringify({ $type: "ProjectsPickerQuery" })), { credentials: "include" });
+      if (!r.ok) return "";
+      const arr = await r.json();
+      if (!Array.isArray(arr)) return "";
+      const p = arr.find((x) => x && (x.id === projId || x.Id === projId || x.value === projId));
+      return p ? String(p.name || p.Name || p.text || "").trim() : "";
+    } catch (e) { return ""; }
   }
 
   // ---- background bridge ------------------------------------------------------
@@ -95,16 +120,16 @@
 .ic-ac div:hover,.ic-ac div.on{background:#eef2ff}
 .ic-ac .nm{font-weight:600}
 .ic-ac .em{color:#64748b;font-size:11.5px}
-.ic-sa{margin-top:6px;border:1px solid #e5e7eb;border-radius:8px;overflow:auto}
+.ic-sa{margin-top:6px;border:1px solid #cbd3dd;border-radius:8px;overflow:auto}
 .ic-sa table{border-collapse:collapse;width:100%;font-size:11px}
-.ic-sa td,.ic-sa th{border:1px solid #eef1f5;padding:0;height:22px}
-.ic-sa th{position:sticky;top:0;background:#f8fafc;font-weight:600;color:#64748b;padding:3px 4px;white-space:nowrap;text-align:left}
-.ic-sa .who{position:sticky;left:0;background:#fff;padding:3px 8px;white-space:nowrap;font-weight:600;color:#334155;max-width:160px;overflow:hidden;text-overflow:ellipsis}
+.ic-sa td,.ic-sa th{border:1px solid #d5dbe3;padding:0;height:22px}
+.ic-sa th{position:sticky;top:0;background:#eef2f7;font-weight:700;color:#334155;padding:3px 4px;white-space:nowrap;text-align:left}
+.ic-sa .who{position:sticky;left:0;background:#fff;padding:3px 8px;white-space:nowrap;font-weight:700;color:#1f2937;max-width:160px;overflow:hidden;text-overflow:ellipsis}
 .ic-sa .cell{width:18px;cursor:pointer}
-.ic-sa .cell.sel{box-shadow:inset 0 0 0 2px #1a56db}
-.ic-sa-legend{display:flex;gap:12px;flex-wrap:wrap;margin:6px 2px 0;font-size:11px;color:#64748b}
-.ic-sa-legend span{display:inline-flex;align-items:center;gap:4px}
-.ic-sa-legend i{width:11px;height:11px;border-radius:2px;display:inline-block;border:1px solid #d7dbe0}
+.ic-sa .cell.sel{box-shadow:inset 0 0 0 2px #1a3a8a}
+.ic-sa-legend{display:flex;gap:12px;flex-wrap:wrap;margin:7px 2px 0;font-size:11px;color:#475569}
+.ic-sa-legend span{display:inline-flex;align-items:center;gap:5px;font-weight:600}
+.ic-sa-legend i{width:12px;height:12px;border-radius:3px;display:inline-block;border:1px solid rgba(0,0,0,.18)}
 #ic-meet-card .mf{display:flex;align-items:center;gap:10px;padding:12px 18px;border-top:1px solid #e5e7eb}
 #ic-meet-card .mf .msg{flex:1;font-size:12.5px}
 #ic-meet-card .mf button{cursor:pointer;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;border:1px solid #cbd5e1;background:#fff;color:#334155}
@@ -165,8 +190,9 @@
       <div><label class="fl">Date</label><input type="date" class="date" /></div>
       <div><label class="fl">Start</label><input type="time" class="time" /></div>
       <div><label class="fl">Duration</label><select class="dur">
-        <option value="30">30 min</option><option value="60" selected>1 hour</option>
-        <option value="90">1.5 hours</option><option value="120">2 hours</option></select></div>
+        <option value="15">15 min</option><option value="30" selected>30 min</option>
+        <option value="60">1 hour</option><option value="90">1.5 hours</option>
+        <option value="120">2 hours</option></select></div>
     </div>
     <label class="fl">Attendees</label>
     <div class="ic-chips att"><input type="text" placeholder="Type a name or email…" /><div class="ic-ac"></div></div>
@@ -196,7 +222,15 @@
     const E = M.el;
     E.woLink.textContent = sel.label || woUrl;
     E.woLink.href = woUrl;
-    E.subj.value = "Page Turn — " + (sel.label || "Work Order");
+    E.subj.value = buildSubject(sel, sel.project || "");
+    E.subj.addEventListener("input", () => { if (M) M.subjEdited = true; });
+    // Project name isn't a column on the project-scoped grid — fill it in from the
+    // picker, unless the user has already tweaked the subject.
+    if (!sel.project) {
+      fetchProjectName(projIdFromHash()).then((pn) => {
+        if (pn && M && !M.subjEdited) M.el.subj.value = buildSubject(sel, pn);
+      });
+    }
     E.date.value = todayStr();
     E.time.value = nextHalfHour();
     E.body.value = `Page-turn review for work order ${sel.label || ""}.\n\nWork order: ${woUrl}\n`;
