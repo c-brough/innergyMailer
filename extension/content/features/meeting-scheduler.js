@@ -90,11 +90,11 @@
     const s = document.createElement("style");
     s.id = "ic-meet-style";
     s.textContent = `
-#ic-meet-fab{position:fixed;left:22px;bottom:22px;z-index:2147483600;display:flex;align-items:center;gap:8px;
-  background:#1a56db;color:#fff;border:none;border-radius:24px;cursor:pointer;padding:10px 16px;
-  font:13px/1.2 -apple-system,Segoe UI,Roboto,sans-serif;font-weight:600;box-shadow:0 6px 20px rgba(26,86,219,.45)}
-#ic-meet-fab:hover{background:#1646b8}
-#ic-meet-fab svg{width:18px;height:18px;fill:#fff}
+#ic-meet-fab{position:fixed;left:22px;bottom:22px;z-index:2147483600;display:inline-flex;align-items:center;gap:6px;
+  background:#fff;color:#1a56db;border:1px solid #c7d0f8;border-radius:16px;cursor:pointer;padding:6px 13px;white-space:nowrap;
+  font:600 12.5px/1 -apple-system,Segoe UI,Roboto,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.14)}
+#ic-meet-fab:hover{background:#1a56db;color:#fff;border-color:#1a56db}
+#ic-meet-fab svg{width:15px;height:15px;fill:currentColor}
 .ic-meet-detail-btn{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2;
   display:inline-flex;align-items:center;gap:6px;background:#fff;color:#1a56db;border:1px solid #c7d0f8;
   border-radius:16px;cursor:pointer;padding:5px 12px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.08);
@@ -165,7 +165,7 @@
     ensureStyle();
     const b = document.createElement("button");
     b.id = "ic-meet-fab";
-    b.innerHTML = CAL_SVG + "<span>Schedule page-turn meeting</span>";
+    b.innerHTML = CAL_SVG + "<span>Schedule page turn</span>";
     b.addEventListener("click", () => openModal());
     document.body.appendChild(b);
   }
@@ -294,9 +294,12 @@
     wireAttendees();
     buildLegend();
 
-    // Default attendees from Options.
+    // Default attendees from Options — add immediately as emails, then resolve
+    // each to its 365-contact display name.
     const d = await new Promise((r) => chrome.storage.local.get("meetingDefaultAttendees", r));
-    for (const em of d.meetingDefaultAttendees || []) addChip(em, em);
+    const defs = (d.meetingDefaultAttendees || []).filter(Boolean);
+    for (const em of defs) addChip(em, em);
+    resolveChipNames(defs);
 
     loadRooms();
     refreshAssistant();
@@ -374,6 +377,21 @@
     const c = M.el.chips.querySelector(`.ic-chip[data-email="${CSS.escape(key)}"]`);
     if (c) c.remove();
     scheduleAssistant();
+  }
+
+  // Replace a chip's email label with the matching 365-contact name (default
+  // attendees are stored as bare emails).
+  async function resolveChipNames(emails) {
+    for (const em of emails) {
+      const r = await send("MEETING_PEOPLE_SEARCH", { q: em });
+      if (!M) return;
+      const key = em.toLowerCase();
+      const p = r && r.ok && (r.people || []).find((x) => (x.email || "").toLowerCase() === key);
+      if (p && p.name && p.name.toLowerCase() !== key) {
+        const b = M.el.chips.querySelector(`.ic-chip[data-email="${CSS.escape(key)}"] b`);
+        if (b) b.textContent = p.name;
+      }
+    }
   }
 
   // ---- rooms -----------------------------------------------------------------

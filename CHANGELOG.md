@@ -3,6 +3,13 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.22.4] - 2026-10-27
+### Changed (meeting scheduler)
+- The grid "Schedule page turn" button now uses the same **discrete** style as the one on
+  the work-order detail page (subtle outlined pill instead of a large blue button).
+- Default attendees now **resolve to their 365-contact names** when the scheduler opens
+  (the saved emails are looked up and the chips show the person's name).
+
 ## [1.22.3] - 2026-10-27
 ### Added (meeting scheduler)
 - A discrete **"Schedule page turn"** button now appears on a **work order's detail page**
