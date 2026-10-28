@@ -25,10 +25,10 @@
   const AV_COLOR = { "0": "#e6f4ea", "1": "#fff4ce", "2": "#f8d7da", "3": "#e2d9f3", "4": "#e9ecef" };
   const AV_LABEL = { "0": "Free", "1": "Tentative", "2": "Busy", "3": "Out of office", "4": "Working elsewhere" };
 
-  let enabled = true;
-  chrome.storage.local.get("meetingSchedulerEnabled", (d) => { enabled = d.meetingSchedulerEnabled !== false; apply(); });
+  let enabled = false; // opt-in: off until turned on in Options
+  chrome.storage.local.get("meetingSchedulerEnabled", (d) => { enabled = d.meetingSchedulerEnabled === true; apply(); });
   chrome.storage.onChanged.addListener((c, a) => {
-    if (a === "local" && c.meetingSchedulerEnabled) { enabled = c.meetingSchedulerEnabled.newValue !== false; apply(); }
+    if (a === "local" && c.meetingSchedulerEnabled) { enabled = c.meetingSchedulerEnabled.newValue === true; apply(); }
   });
 
   // ---- selection from the MAIN-world reader ----------------------------------

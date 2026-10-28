@@ -635,7 +635,7 @@ fpNativeBox.addEventListener("change", (e) => {
   const defAtt = document.getElementById("meet-default-attendees");
 
   const enBox = document.getElementById("meeting-scheduler-enabled");
-  chrome.storage.local.get("meetingSchedulerEnabled", (d) => { enBox.checked = d.meetingSchedulerEnabled !== false; }); // default on
+  chrome.storage.local.get("meetingSchedulerEnabled", (d) => { enBox.checked = d.meetingSchedulerEnabled === true; }); // opt-in, default off
   enBox.addEventListener("change", (e) => { chrome.storage.local.set({ meetingSchedulerEnabled: e.target.checked }); showSaved(); });
 
   chrome.storage.local.get("meetingDefaultAttendees", (d) => {
@@ -982,7 +982,7 @@ notifTypeBoxes.forEach((cb) => cb.addEventListener("change", saveNotifTypes));
       case "note-drafts": return data.noteDraftsEnabled !== false;  // on by default
       case "co-wizard": return data.changeOrderWizardEnabled !== false; // on by default
       case "file-paths": return data.filePathLinksEnabled !== false; // on by default
-      case "meetings": return data.meetingSchedulerEnabled !== false; // on by default
+      case "meetings": return data.meetingSchedulerEnabled === true; // opt-in
       case "notifications": return data.notifSidebarEnabled === true;
       default: return false;                     // Updates: neutral
     }

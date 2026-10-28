@@ -3,6 +3,11 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.22.1] - 2026-10-27
+### Changed
+- The page-turn meeting scheduler is now **opt-in (off by default)** — turn it on under
+  Options → Meetings to show the "Schedule page-turn meeting" button on Work-Order grids.
+
 ## [1.22.0] - 2026-10-27
 ### Added — Page-turn meeting scheduler
 - On a **Work-Order grid** (project grid or the global `#/workOrders/grid`), checking
