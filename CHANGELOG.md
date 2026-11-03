@@ -5,6 +5,9 @@ file to show you what's new when an update is available.
 
 ## [1.24.0] - 2026-11-03
 ### Changed (Quick Change Order)
+- Relabeled "Location" in the wizard form to **Line Item (takeoff location)** — the field,
+  the per-item header ("Line Item 1"), the Add button, the status line and validation
+  messages all use the new wording (takeoff records are still created as locations).
 - Committing to the takeoff no longer errors out on two avoidable collisions — it recovers
   automatically:
   - **Duplicate location name:** if a location with that name already exists, the new one is

@@ -139,7 +139,7 @@
       '<div class="ic-cow-note"></div>' +
       '<div class="ic-cow-body"></div>' +
       '<div class="ic-cow-foot">' +
-        '<button class="ic-cow-addloc" type="button">+ Add location</button>' +
+        '<button class="ic-cow-addloc" type="button">+ Add line item</button>' +
         '<div class="ic-cow-foot-right">' +
           '<span class="ic-cow-status"></span>' +
           '<button class="ic-cow-commit" type="button">Commit &amp; lock</button>' +
@@ -147,7 +147,7 @@
       '</div>';
     card.querySelector(".ic-cow-ttl h2").textContent = co.name;
     card.querySelector(".ic-cow-note").textContent =
-      "Build the locations and products for this change order, then Commit — it opens the Takeoff and creates them there. Afterward, click Recalculate in the takeoff to update the CO total.";
+      "Build the line items (takeoff locations) and products for this change order, then Commit — it opens the Takeoff and creates them there. Afterward, click Recalculate in the takeoff to update the CO total.";
     overlay.appendChild(card);
     document.body.appendChild(overlay);
 
@@ -171,7 +171,7 @@
     const wrap = document.createElement("div");
     wrap.className = "ic-cow-loc" + (loc.committed ? " ic-locked" : "");
     const head = document.createElement("div"); head.className = "ic-cow-loc-head";
-    const idx = document.createElement("span"); idx.className = "ic-cow-loc-idx"; idx.textContent = "Location " + (li + 1);
+    const idx = document.createElement("span"); idx.className = "ic-cow-loc-idx"; idx.textContent = "Line Item " + (li + 1);
     head.appendChild(idx);
     if (loc.committed) { const lk = document.createElement("span"); lk.className = "ic-cow-lock"; lk.textContent = "🔒 locked"; head.appendChild(lk); }
     else if (current.entry.locations.length > 1) {
@@ -181,7 +181,7 @@
     }
     wrap.appendChild(head);
 
-    wrap.appendChild(field("Location name", textInput(loc.name, loc.committed, (v) => { loc.name = v; persist(); })));
+    wrap.appendChild(field("Line Item (takeoff location)", textInput(loc.name, loc.committed, (v) => { loc.name = v; persist(); })));
     wrap.appendChild(field("Scope", textArea(loc.scope, loc.committed, (v) => { loc.scope = v; persist(); })));
 
     const prods = document.createElement("div"); prods.className = "ic-cow-prods";
@@ -277,7 +277,7 @@
     const { locs, prods } = countPending();
     current.statusEl.textContent =
       (committed ? committed + " locked · " : "") +
-      (locs || prods ? locs + " new location" + (locs === 1 ? "" : "s") + ", " + prods + " product" + (prods === 1 ? "" : "s") + " ready" : "nothing to commit yet");
+      (locs || prods ? locs + " new line item" + (locs === 1 ? "" : "s") + ", " + prods + " product" + (prods === 1 ? "" : "s") + " ready" : "nothing to commit yet");
   }
 
   function loadJobs() {
@@ -295,7 +295,7 @@
     const problems = [];
     current.entry.locations.forEach((loc, li) => {
       if (loc.committed) return;
-      if (!(loc.name || "").trim()) problems.push("Location " + (li + 1) + " needs a name");
+      if (!(loc.name || "").trim()) problems.push("Line Item " + (li + 1) + " needs a name");
       (loc.products || []).forEach((p) => {
         if (p.committed) return;
         if ((p.name || "").trim() && !(String(p.price).trim())) problems.push('"' + p.name + '" needs a price');
