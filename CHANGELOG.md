@@ -8,14 +8,15 @@ file to show you what's new when an update is available.
 - Relabeled "Location" in the wizard form to **Line Item (takeoff location)** — the field,
   the per-item header ("Line Item 1"), the Add button, the status line and validation
   messages all use the new wording (takeoff records are still created as locations).
-- Committing to the takeoff no longer errors out on two avoidable collisions — it recovers
-  automatically:
-  - **Duplicate location name:** if a location with that name already exists, the new one is
-    created under the next free serialized name ("Kitchen" → "Kitchen 2", "Kitchen 3", …)
-    instead of failing.
-  - **Occupied coordinates:** if the spot a new location would be placed is already taken, it
-    steps to the next clear cell and places there (products then nest inside the location's
-    actual placed rectangle) instead of failing.
+- Takeoff line-item names are now **prefixed with the change-order name** ("Kitchen" →
+  "CO-3 - Kitchen"), which makes duplicate-name collisions far less likely.
+- **Duplicate line-item name:** if a line item with that (prefixed) name still already exists
+  in the takeoff, the commit stops and **closes the takeoff tab** so you land back on the
+  change-order form, where the note tells you to rename the line item and commit again. (Your
+  entries are kept.)
+- **Occupied coordinates:** if the spot a new line item would be placed is already taken, it
+  steps to the next clear cell and places there (products then nest inside the line item's
+  actual placed rectangle) instead of failing.
 
 ## [1.23.0] - 2026-10-28
 ### Added (meeting scheduler)

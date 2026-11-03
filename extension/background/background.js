@@ -25,6 +25,7 @@ import {
   handleOpenPathNative,
   handlePingHost,
   handleOpenOptions,
+  handleCloseSelfTab,
 } from "./features/open-path.js";
 import { registerLifecycle } from "./features/lifecycle.js";
 import {
@@ -47,6 +48,7 @@ const handlers = {
   OPEN_LOCAL_PATH_NATIVE: handleOpenPathNative,
   PING_HOST: handlePingHost,
   OPEN_OPTIONS: handleOpenOptions,
+  CLOSE_SELF_TAB: handleCloseSelfTab,
   MEETING_VERIFY: handleMeetingVerify,
   MEETING_PEOPLE_SEARCH: handleMeetingPeopleSearch,
   MEETING_GET_SCHEDULE: handleMeetingGetSchedule,

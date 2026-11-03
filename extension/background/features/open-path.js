@@ -81,3 +81,13 @@ export function handleOpenOptions(msg, sender, sendResponse) {
   try { chrome.runtime.openOptionsPage(); sendResponse({ ok: true }); }
   catch (e) { sendResponse({ ok: false, error: String(e) }); }
 }
+
+// Close the tab that sent this message. A content script can't close its own tab
+// directly, so it asks us. Used by the change-order wizard to drop the user back
+// on the CO form when a commit can only be fixed there (duplicate line-item name).
+export function handleCloseSelfTab(msg, sender, sendResponse) {
+  const tabId = sender && sender.tab && sender.tab.id;
+  if (tabId == null) { sendResponse({ ok: false, error: "no tab" }); return; }
+  try { chrome.tabs.remove(tabId); sendResponse({ ok: true }); }
+  catch (e) { sendResponse({ ok: false, error: String(e) }); }
+}
