@@ -3,6 +3,17 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.24.0] - 2026-11-03
+### Changed (Quick Change Order)
+- Committing to the takeoff no longer errors out on two avoidable collisions — it recovers
+  automatically:
+  - **Duplicate location name:** if a location with that name already exists, the new one is
+    created under the next free serialized name ("Kitchen" → "Kitchen 2", "Kitchen 3", …)
+    instead of failing.
+  - **Occupied coordinates:** if the spot a new location would be placed is already taken, it
+    steps to the next clear cell and places there (products then nest inside the location's
+    actual placed rectangle) instead of failing.
+
 ## [1.23.0] - 2026-10-28
 ### Added (meeting scheduler)
 - **Multiple work orders** can now be scheduled in one page-turn meeting — but only when
