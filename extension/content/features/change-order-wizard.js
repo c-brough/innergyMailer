@@ -194,7 +194,9 @@
   async function drawingsUpload(pid, file) {
     const fd = new FormData();
     fd.append("blueprints", file, file.name);
-    const r = await fetch(SHEET_HOST + "/Drawings/BlueprintsUpload/Upload?projectId=" + encodeURIComponent(pid), { method: "POST", credentials: "include", body: fd });
+    // projectType=1 (standard project) is REQUIRED — without it the server accepts
+    // the file but never enqueues bursting, so no sheets are ever produced.
+    const r = await fetch(SHEET_HOST + "/Drawings/BlueprintsUpload/Upload?projectId=" + encodeURIComponent(pid) + "&projectType=1", { method: "POST", credentials: "include", body: fd });
     let data = null; try { data = JSON.parse(await r.text()); } catch (e) { /* non-json */ }
     return { ok: r.ok, status: r.status, data };
   }
@@ -215,9 +217,6 @@
       throw new Error((up.data && up.data.Messages && up.data.Messages[0] && up.data.Messages[0].Message) || "upload failed");
     }
 
-    try { localStorage.setItem("__icDbg", JSON.stringify({ batchId: batchId, uploadKeys: up.data ? Object.keys(up.data) : null, uploadData: up.data, polls: [] })); } catch (e) { /* debug */ }
-    const dbgPoll = (rec) => { try { const d = JSON.parse(localStorage.getItem("__icDbg") || "{}"); (d.polls = d.polls || []).push(rec); localStorage.setItem("__icDbg", JSON.stringify(d)); } catch (e) {} };
-
     onStep("Analyzing sheet…");
     const asArray = (d) => Array.isArray(d) ? d : (d && Array.isArray(d.Data) ? d.Data : (d && Array.isArray(d.data) ? d.data : []));
     const fstatus = (f) => (f.status != null ? f.status : (f.Status != null ? f.Status : null));
@@ -225,7 +224,6 @@
     for (let i = 0; i < 150; i++) { // ~3 min ceiling
       await sleep(1200);
       const st = await drawingsGet("/Drawings/BlueprintsProcessInfo/GetBurstingStatus", { projectId: pid, batchIds: batchId });
-      if (i < 4) dbgPoll({ i, ok: st.ok, status: st.status, data: st.data });
       const arr = asArray(st.data);
       const batch = arr.find((b) => b && (b.batchId === batchId || b.BatchId === batchId)) || arr[0];
       const files = (batch && (batch.files || batch.Files)) || [];
