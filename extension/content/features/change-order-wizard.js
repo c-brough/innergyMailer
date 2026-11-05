@@ -402,10 +402,14 @@
     pr.value = formatMoney(p.price);
     pr.addEventListener("focus", () => { if (!pr.disabled) pr.value = (p.price === "" || p.price == null) ? "" : String(p.price); });
     pr.addEventListener("input", () => {
-      let v = pr.value.replace(/[^0-9.]/g, "");
+      // Allow a leading minus for credits (negative prices). Strip other chars,
+      // collapse any minus signs to a single leading one, keep one decimal point.
+      let v = pr.value.replace(/[^0-9.\-]/g, "");
+      const neg = v.indexOf("-") !== -1;
+      v = v.replace(/-/g, "");
       const parts = v.split(".");
       if (parts.length > 2) v = parts[0] + "." + parts.slice(1).join("");
-      p.price = v; persist();
+      p.price = (neg ? "-" : "") + v; persist();
     });
     pr.addEventListener("blur", () => {
       const n = parseFloat(p.price);
@@ -420,12 +424,13 @@
     return row;
   }
 
-  // US currency: 2 decimals + thousands separators. "" for blank/invalid.
+  // US currency: 2 decimals + thousands separators; negatives (credits) as "-$…".
+  // "" for blank/invalid.
   function formatMoney(v) {
     if (v === "" || v == null) return "";
     const n = parseFloat(v);
     if (isNaN(n)) return "";
-    return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return (n < 0 ? "-$" : "$") + Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
   // ---- small input helpers ---------------------------------------------------

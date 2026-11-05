@@ -15,8 +15,9 @@ file to show you what's new when an update is available.
   freshly uploaded blank sheet they're laid out in-bounds so they're visible).
 - If a sheet with that number already exists in the project, Upload **warns and asks** before
   publishing a new version.
-- Still to come (part 2): selecting an **existing** takeoff sheet instead of uploading, and a
-  live validation pass of the new-sheet placement id mapping.
+- **Negative product prices** are now allowed (type a leading `-`) for issuing credits; they
+  show as `-$…` and flow through to the takeoff as a negative fabrication price.
+- Still to come (part 2): selecting an **existing** takeoff sheet instead of uploading.
 
 ## [1.24.0] - 2026-11-03
 ### Changed (Quick Change Order)
