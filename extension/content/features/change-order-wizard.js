@@ -215,6 +215,9 @@
       throw new Error((up.data && up.data.Messages && up.data.Messages[0] && up.data.Messages[0].Message) || "upload failed");
     }
 
+    try { localStorage.setItem("__icDbg", JSON.stringify({ batchId: batchId, uploadKeys: up.data ? Object.keys(up.data) : null, uploadData: up.data, polls: [] })); } catch (e) { /* debug */ }
+    const dbgPoll = (rec) => { try { const d = JSON.parse(localStorage.getItem("__icDbg") || "{}"); (d.polls = d.polls || []).push(rec); localStorage.setItem("__icDbg", JSON.stringify(d)); } catch (e) {} };
+
     onStep("Analyzing sheet…");
     const asArray = (d) => Array.isArray(d) ? d : (d && Array.isArray(d.Data) ? d.Data : (d && Array.isArray(d.data) ? d.data : []));
     const fstatus = (f) => (f.status != null ? f.status : (f.Status != null ? f.Status : null));
@@ -222,6 +225,7 @@
     for (let i = 0; i < 150; i++) { // ~3 min ceiling
       await sleep(1200);
       const st = await drawingsGet("/Drawings/BlueprintsProcessInfo/GetBurstingStatus", { projectId: pid, batchIds: batchId });
+      if (i < 4) dbgPoll({ i, ok: st.ok, status: st.status, data: st.data });
       const arr = asArray(st.data);
       const batch = arr.find((b) => b && (b.batchId === batchId || b.BatchId === batchId)) || arr[0];
       const files = (batch && (batch.files || batch.Files)) || [];
