@@ -216,16 +216,21 @@
     }
 
     onStep("Analyzing sheet…");
+    const asArray = (d) => Array.isArray(d) ? d : (d && Array.isArray(d.Data) ? d.Data : (d && Array.isArray(d.data) ? d.data : []));
+    const fstatus = (f) => (f.status != null ? f.status : (f.Status != null ? f.Status : null));
+    const fdone = (f) => { const s = fstatus(f); const pt = f.pagesTotal != null ? f.pagesTotal : f.PagesTotal; const pp = f.pagesProcessed != null ? f.pagesProcessed : f.PagesProcessed; return s === 2 && (pt == null || pp == null || pp >= pt); };
     for (let i = 0; i < 150; i++) { // ~3 min ceiling
       await sleep(1200);
       const st = await drawingsGet("/Drawings/BlueprintsProcessInfo/GetBurstingStatus", { projectId: pid, batchIds: batchId });
-      const arr = Array.isArray(st.data) ? st.data : [];
-      const batch = arr.find((b) => b && b.batchId === batchId) || arr[0];
-      const files = (batch && batch.files) || [];
-      if (files.some((f) => f.status === 3 || f.status === 4)) throw new Error("Innergy couldn't process this file.");
-      if (files.length && files.every((f) => f.status === 2 && (f.pagesProcessed == null || f.pagesProcessed >= f.pagesTotal))) break;
-      onStep("Analyzing sheet… (" + (i + 1) + ")");
-      if (i === 149) throw new Error("timed out waiting for Innergy to analyze the sheet.");
+      const arr = asArray(st.data);
+      const batch = arr.find((b) => b && (b.batchId === batchId || b.BatchId === batchId)) || arr[0];
+      const files = (batch && (batch.files || batch.Files)) || [];
+      if (files.some((f) => fstatus(f) === 3 || fstatus(f) === 4)) throw new Error("Innergy couldn't process this file (status " + fstatus(files[0]) + ").");
+      if (files.length && files.every(fdone)) break;
+      // Diagnostic: surface what the poll actually returns so a mismatch is visible.
+      const diag = !arr.length ? "queued" : (!files.length ? "batch, no files" : files.map((f) => "st=" + fstatus(f) + " " + (f.pagesProcessed != null ? f.pagesProcessed : "?") + "/" + (f.pagesTotal != null ? f.pagesTotal : "?")).join(", "));
+      onStep("Analyzing sheet… (" + (i + 1) + ") — " + diag);
+      if (i === 149) throw new Error("timed out analyzing (last: " + diag + ").");
     }
 
     const gd = await drawingsGet("/Drawings/SheetsRenaming/GetData", { batchId, projectId: pid });
