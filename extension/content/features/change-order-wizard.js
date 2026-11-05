@@ -245,28 +245,33 @@
     if (!sheets.length) throw new Error("no sheet was produced from the upload.");
     const sheet = sheets[0]; // one page per CO upload
 
-    // Versioning: warn if a sheet with this number already exists in the project.
-    let versionIndex = 0;
-    const prev = await drawingsPost("/Drawings/SheetsRenaming/GetPreviousVersions", { projectId: pid, numbers: [number] });
-    const existing = prev.data && typeof prev.data === "object" && Object.keys(prev.data).length ? prev.data : null;
-    if (existing) {
+    // Versioning. GetData's `availableVersions` lists the project's existing
+    // version sets by name; `issueDateIfNewSet` is the date to stamp a new set.
+    // A NEW version set is published with the all-zeros GUID (the server mints the
+    // real id); publishing INTO an existing set reuses that set's id.
+    const ZERO_GUID = "00000000-0000-0000-0000-000000000000";
+    const normn = (x) => String(x || "").trim().toLowerCase();
+    const availableVersions = (gd.data && gd.data.availableVersions) || [];
+    const existingSet = availableVersions.find((v) => normn(v.name) === normn(number));
+    let versionId = ZERO_GUID, versionIndex = 0, versionOrderIndex = 0;
+    if (existingSet) {
       if (!confirm('A sheet numbered "' + number + '" already exists in this project.\n\nPublish the uploaded file as a NEW VERSION of it?\n\n(Cancel to stop — you can pick a different number or use the existing sheet.)')) {
         throw new Error("__cancelled__");
       }
-      versionIndex = 1; // best-effort next version; exact index TBD (see memory)
+      versionId = existingSet.id; versionOrderIndex = existingSet.orderIndex || 0; versionIndex = 1; // best-effort next index
     }
     const name = number + "." + versionIndex;
+    const d = new Date();
+    const issueDate = (gd.data && gd.data.issueDateIfNewSet) || { date: d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0") };
 
     onStep('Naming sheet "' + name + '"…');
     if (!okResp(await drawingsPost("/Drawings/CommonRenaming/ChangeSheetNumber", { id: sheet.id, number }))) throw new Error("couldn't set the sheet number.");
     if (!okResp(await drawingsPost("/Drawings/CommonRenaming/ChangeSheetName", { id: sheet.id, name }))) throw new Error("couldn't set the sheet name.");
 
     onStep("Publishing…");
-    const d = new Date();
-    const iso = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
     const pub = await drawingsPost("/Drawings/SheetsRenaming/Publish", {
       sheets: [{ id: sheet.id, name, number, redlineComments: null }],
-      version: { id: uuid(), name: number, issueDate: { date: iso }, orderIndex: 0, $type: "SheetVersionSetDto" },
+      version: { id: versionId, name: number, issueDate, orderIndex: versionOrderIndex, $type: "SheetVersionSetDto" },
       autoTaggingEnabled: true, autoHyperlinkGenerationEnabled: true, minHyperlinkLength: 3,
       scaleDetectionEnabled: true, projectId: pid, workOrderAction: 3, batchId,
     });
