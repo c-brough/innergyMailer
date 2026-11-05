@@ -3,6 +3,21 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.25.0] - 2026-11-05
+### Added (Quick Change Order — sheet import, part 1)
+- The wizard now starts with a **sheet step**: the location/product form is **locked** until a
+  sheet is attached. Pick a blueprint (PDF/JPG/TIFF) and a sheet number (auto-derived from the
+  CO, e.g. "CO003", editable), press **Upload & publish**, and the wizard drives Innergy's whole
+  pipeline for you — upload → **analyze** (polls bursting status) → name/version → **publish** —
+  showing live progress. When it's published, the form unlocks.
+- **Commit is blocked** until a sheet is published (or selected). The published sheet is stored
+  on the draft and passed to commit, and locations/products are placed on **that** sheet (on a
+  freshly uploaded blank sheet they're laid out in-bounds so they're visible).
+- If a sheet with that number already exists in the project, Upload **warns and asks** before
+  publishing a new version.
+- Still to come (part 2): selecting an **existing** takeoff sheet instead of uploading, and a
+  live validation pass of the new-sheet placement id mapping.
+
 ## [1.24.0] - 2026-11-03
 ### Changed (Quick Change Order)
 - Relabeled "Location" in the wizard form to **Line Item (takeoff location)** — the field,

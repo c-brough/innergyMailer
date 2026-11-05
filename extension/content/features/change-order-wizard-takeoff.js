@@ -71,12 +71,25 @@
   // reliably clear, and size doesn't affect a fixed-price product's cost. Each
   // product's cost object is a tiny rect nested inside its own location rect.
   const COL_X = -1000; // proven within the canvas and clear of (positive-coord) content
-  // Each location gets its own 90×90 cell in the empty column. `cellRect` maps a
-  // flat cell index to a distinct, non-overlapping rect (40 rows per column, then
-  // step a column further left). If a cell is already occupied, placement retries
-  // the next free cell — so a collision just moves the new location instead of
-  // failing. Product cost objects nest inside the location's *actual* placed rect.
-  function cellRect(k) { const ROWS = 40; const col = Math.floor(k / ROWS), row = k % ROWS; const x = COL_X - col * 160, y0 = 100 + row * 140; return [x, y0, x + 90, y0 + 90]; }
+  // Placement layout, set per run by `setPlacement`. Each location gets its own
+  // 90×90 cell; `cellRect` maps a flat cell index to a distinct, non-overlapping
+  // rect, stepping down rows then across columns. If a cell is already occupied,
+  // placement retries the next free cell. Product cost objects nest inside the
+  // location's *actual* placed rect.
+  //  • Existing (user) sheet: a far-NEGATIVE-X column, clear of positive-coord
+  //    blueprint content.
+  //  • New uploaded (blank) sheet: a tidy positive column inside the sheet bounds,
+  //    so the line items are visible on the sheet.
+  let PLACE = { x0: COL_X, y0: 100, colStep: -160, rows: 40, rowStep: 140 };
+  function setPlacement(sheet) {
+    if (sheet && sheet.source === "upload" && sheet.width > 200 && sheet.height > 300) {
+      const rows = Math.max(1, Math.floor((sheet.height - 120) / 140));
+      PLACE = { x0: 40, y0: 40, colStep: 140, rows, rowStep: 140 };
+    } else {
+      PLACE = { x0: COL_X, y0: 100, colStep: -160, rows: 40, rowStep: 140 };
+    }
+  }
+  function cellRect(k) { const col = Math.floor(k / PLACE.rows), row = k % PLACE.rows; const x = PLACE.x0 + col * PLACE.colStep, y0 = PLACE.y0 + row * PLACE.rowStep; return [x, y0, x + 90, y0 + 90]; }
   function locRectAttempt(i, attempt) { return cellRect(i + attempt * 64); }
   function prodRectIn(locR, j) { const x0 = locR[0] + 10 + (j % 4) * 18, y0 = locR[1] + 10 + Math.floor(j / 4) * 18; return [x0, y0, x0 + 12, y0 + 12]; }
 
@@ -132,16 +145,22 @@
       // Wait for the bridge (headers + open sheet). If no sheet is open the takeoff
       // can't place anything, so after a short grace period we ask the user to open
       // one (rather than hanging). Either way the job ends 'failed', never stuck.
+      // The wizard tells us which published sheet to place on (job.sheet, from the
+      // sheet-import step). We still need the bridge ready (for headers); we only
+      // fall back to the takeoff's currently OPEN sheet when the job carries no
+      // sheet (legacy drafts from before the sheet step).
+      const jobSheetId = job.sheet && job.sheet.sheetId;
       let st = null;
       for (let i = 0; i < 30; i++) {
         st = await bridgeState();
-        if (st && st.ready && st.sheetId) break;
-        if (i === 6 && st && st.ready && !st.sheetId) status("Open any sheet in this takeoff (Sheets panel) — the wizard needs an open sheet to place the records…", "");
+        if (st && st.ready && (jobSheetId || st.sheetId)) break;
+        if (i === 6 && st && st.ready && !jobSheetId && !st.sheetId) status("Open any sheet in this takeoff (Sheets panel) — the wizard needs an open sheet to place the records…", "");
         await sleep(1000);
       }
       if (!st || !st.ready) throw new Error("the takeoff didn't finish loading (couldn't read the session) — reload the takeoff and commit again.");
-      if (!st.sheetId) throw new Error("no sheet is open in this takeoff — open any sheet (Sheets panel), then commit again.");
-      const sheetId = st.sheetId;
+      const sheetId = jobSheetId || st.sheetId;
+      if (!sheetId) throw new Error("no sheet to place on — open the sheet (Sheets panel) or re-run the wizard's sheet step, then commit again.");
+      setPlacement(job.sheet);
 
       const origins = (await q({ $type: "NonBaseBidOriginsListQuery" })) || [];
       const origin = origins.find((o) => norm(o.displayName) === norm(job.coName));

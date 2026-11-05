@@ -137,6 +137,7 @@
         '<button class="ic-cow-x" type="button" title="Close">×</button>' +
       '</div>' +
       '<div class="ic-cow-note"></div>' +
+      '<div class="ic-cow-sheet"></div>' +
       '<div class="ic-cow-body"></div>' +
       '<div class="ic-cow-foot">' +
         '<button class="ic-cow-addloc" type="button">+ Add line item</button>' +
@@ -151,14 +152,200 @@
     overlay.appendChild(card);
     document.body.appendChild(overlay);
 
-    current = { co, entry, body: card.querySelector(".ic-cow-body"), statusEl: card.querySelector(".ic-cow-status"), noteEl: card.querySelector(".ic-cow-note") };
+    current = { co, entry, body: card.querySelector(".ic-cow-body"), sheetEl: card.querySelector(".ic-cow-sheet"), statusEl: card.querySelector(".ic-cow-status"), noteEl: card.querySelector(".ic-cow-note"), commitBtn: card.querySelector(".ic-cow-commit"), addLocBtn: card.querySelector(".ic-cow-addloc") };
     current._lastSig = committedSig(entry);
     card.querySelector(".ic-cow-x").addEventListener("click", closeWizard);
-    card.querySelector(".ic-cow-addloc").addEventListener("click", () => { entry.locations.push(blankLocation()); renderBody(); persist(); });
-    card.querySelector(".ic-cow-commit").addEventListener("click", commitAll);
+    current.addLocBtn.addEventListener("click", () => { entry.locations.push(blankLocation()); renderBody(); persist(); });
+    current.commitBtn.addEventListener("click", commitAll);
+    renderSheetPanel();
     renderBody();
     updateStatus();
+    applySheetLock();
   }
+
+  // ======================= Sheet import (Step 0) =============================
+  // A change order's locations/products must be placed on a published Innergy
+  // "sheet". The PM uploads a new blueprint here and we drive Innergy's
+  // upload → burst/analyze → rename → publish pipeline via same-origin /Drawings/*
+  // endpoints (cookie auth, no CSRF token). Until a sheet is published the
+  // location/product form stays locked and Commit is disabled. The published
+  // sheet is stored on the draft as entry.sheet. See the
+  // innergy-sheets-upload-publish-api memory for the full API.
+
+  const SHEET_HOST = "https://app.innergy.com";
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  function uuid() {
+    if (crypto.randomUUID) return crypto.randomUUID();
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => { const r = Math.random() * 16 | 0; return (c === "x" ? r : (r & 0x3 | 0x8)).toString(16); });
+  }
+  const okResp = (r) => !!(r && r.ok && r.data && r.data.IsSuccess !== false && (r.data.OutcomeType == null || r.data.OutcomeType === 0));
+
+  async function drawingsGet(path, query) {
+    const qs = query ? ("?" + new URLSearchParams(query).toString()) : "";
+    const r = await fetch(SHEET_HOST + path + qs, { method: "GET", credentials: "include" });
+    let data = null; try { data = JSON.parse(await r.text()); } catch (e) { /* non-json */ }
+    return { ok: r.ok, status: r.status, data };
+  }
+  async function drawingsPost(path, body) {
+    const r = await fetch(SHEET_HOST + path, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    let data = null; try { data = JSON.parse(await r.text()); } catch (e) { /* non-json */ }
+    return { ok: r.ok, status: r.status, data };
+  }
+  async function drawingsUpload(pid, file) {
+    const fd = new FormData();
+    fd.append("blueprints", file, file.name);
+    const r = await fetch(SHEET_HOST + "/Drawings/BlueprintsUpload/Upload?projectId=" + encodeURIComponent(pid), { method: "POST", credentials: "include", body: fd });
+    let data = null; try { data = JSON.parse(await r.text()); } catch (e) { /* non-json */ }
+    return { ok: r.ok, status: r.status, data };
+  }
+
+  // "CO-3 - Extra cabinets" → "CO003"; falls back to the trimmed CO name.
+  function deriveSheetNumber(coName) {
+    const m = String(coName || "").match(/(\d+)/);
+    if (m) return "CO" + String(m[1]).slice(0, 3).padStart(3, "0");
+    return String(coName || "").trim().slice(0, 20);
+  }
+
+  // Full pipeline. onStep(msg) reports progress. Returns the stored entry.sheet.
+  async function uploadAndPublish(pid, file, number, onStep) {
+    onStep("Uploading " + file.name + "…");
+    const up = await drawingsUpload(pid, file);
+    const batchId = up.data && up.data.batchId;
+    if (!up.ok || (up.data && up.data.IsSuccess === false) || !batchId) {
+      throw new Error((up.data && up.data.Messages && up.data.Messages[0] && up.data.Messages[0].Message) || "upload failed");
+    }
+
+    onStep("Analyzing sheet…");
+    for (let i = 0; i < 150; i++) { // ~3 min ceiling
+      await sleep(1200);
+      const st = await drawingsGet("/Drawings/BlueprintsProcessInfo/GetBurstingStatus", { projectId: pid, batchIds: batchId });
+      const arr = Array.isArray(st.data) ? st.data : [];
+      const batch = arr.find((b) => b && b.batchId === batchId) || arr[0];
+      const files = (batch && batch.files) || [];
+      if (files.some((f) => f.status === 3 || f.status === 4)) throw new Error("Innergy couldn't process this file.");
+      if (files.length && files.every((f) => f.status === 2 && (f.pagesProcessed == null || f.pagesProcessed >= f.pagesTotal))) break;
+      onStep("Analyzing sheet… (" + (i + 1) + ")");
+      if (i === 149) throw new Error("timed out waiting for Innergy to analyze the sheet.");
+    }
+
+    const gd = await drawingsGet("/Drawings/SheetsRenaming/GetData", { batchId, projectId: pid });
+    const sheets = (gd.data && gd.data.sheets) || [];
+    if (!sheets.length) throw new Error("no sheet was produced from the upload.");
+    const sheet = sheets[0]; // one page per CO upload
+
+    // Versioning: warn if a sheet with this number already exists in the project.
+    let versionIndex = 0;
+    const prev = await drawingsPost("/Drawings/SheetsRenaming/GetPreviousVersions", { projectId: pid, numbers: [number] });
+    const existing = prev.data && typeof prev.data === "object" && Object.keys(prev.data).length ? prev.data : null;
+    if (existing) {
+      if (!confirm('A sheet numbered "' + number + '" already exists in this project.\n\nPublish the uploaded file as a NEW VERSION of it?\n\n(Cancel to stop — you can pick a different number or use the existing sheet.)')) {
+        throw new Error("__cancelled__");
+      }
+      versionIndex = 1; // best-effort next version; exact index TBD (see memory)
+    }
+    const name = number + "." + versionIndex;
+
+    onStep('Naming sheet "' + name + '"…');
+    if (!okResp(await drawingsPost("/Drawings/CommonRenaming/ChangeSheetNumber", { id: sheet.id, number }))) throw new Error("couldn't set the sheet number.");
+    if (!okResp(await drawingsPost("/Drawings/CommonRenaming/ChangeSheetName", { id: sheet.id, name }))) throw new Error("couldn't set the sheet name.");
+
+    onStep("Publishing…");
+    const d = new Date();
+    const iso = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    const pub = await drawingsPost("/Drawings/SheetsRenaming/Publish", {
+      sheets: [{ id: sheet.id, name, number, redlineComments: null }],
+      version: { id: uuid(), name: number, issueDate: { date: iso }, orderIndex: 0, $type: "SheetVersionSetDto" },
+      autoTaggingEnabled: true, autoHyperlinkGenerationEnabled: true, minHyperlinkLength: 3,
+      scaleDetectionEnabled: true, projectId: pid, workOrderAction: 3, batchId,
+    });
+    if (!okResp(pub)) throw new Error((pub.data && pub.data.Messages && pub.data.Messages[0] && pub.data.Messages[0].Message) || "publish failed.");
+
+    return { source: "upload", published: true, sheetId: sheet.id, number, name, width: sheet.width, height: sheet.height, batchId };
+  }
+
+  // Is a usable sheet ready? (published/selected, or a legacy already-committed draft.)
+  function sheetReady() {
+    const e = current && current.entry;
+    if (!e) return false;
+    if (e.sheet && e.sheet.published && e.sheet.sheetId) return true;
+    if ((e.locations || []).some((l) => l.committed)) return true; // pre-sheet-step drafts
+    return false;
+  }
+
+  // Lock the location/product form + commit until a sheet is ready.
+  function applySheetLock() {
+    if (!current) return;
+    const ready = sheetReady();
+    current.body.classList.toggle("ic-cow-locked-form", !ready);
+    if (current.commitBtn) current.commitBtn.disabled = !ready;
+    if (current.addLocBtn) current.addLocBtn.disabled = !ready;
+  }
+
+  function renderSheetPanel() {
+    if (!current) return;
+    const { entry, sheetEl } = current;
+    sheetEl.innerHTML = "";
+    const s = entry.sheet;
+    const legacyCommitted = !(s && s.published) && (entry.locations || []).some((l) => l.committed);
+    if ((s && s.published && s.sheetId) || legacyCommitted) {
+      const row = document.createElement("div"); row.className = "ic-cow-sheet-ready";
+      const sub = legacyCommitted ? "committed earlier" : (s.source === "existing" ? "existing" : "published");
+      row.innerHTML = '<span class="ic-cow-sheet-ic">✓</span><div class="ic-cow-sheet-txt"><b>Sheet ready</b><span>' +
+        escapeHtml((s && (s.name || s.number)) || "sheet") + " · " + sub + "</span></div>";
+      if (!legacyCommitted && !(entry.locations || []).some((l) => l.committed)) {
+        const ch = document.createElement("button"); ch.type = "button"; ch.className = "ic-cow-sheet-change"; ch.textContent = "Change";
+        ch.addEventListener("click", () => { entry.sheet = null; persist(); renderSheetPanel(); applySheetLock(); });
+        row.appendChild(ch);
+      }
+      sheetEl.appendChild(row);
+      return;
+    }
+    // Upload form.
+    const wrap = document.createElement("div"); wrap.className = "ic-cow-sheet-form";
+    wrap.innerHTML =
+      '<div class="ic-cow-sheet-hd">Step 1 — attach a sheet for this change order</div>' +
+      '<div class="ic-cow-sheet-grid">' +
+        '<label class="ic-cow-sheet-file"><input type="file" accept=".pdf,.jpg,.jpeg,.tiff,.tif"><span class="ic-cow-sheet-fname">Choose a sheet (PDF/JPG/TIFF)…</span></label>' +
+        '<label class="ic-cow-sheet-numwrap">Sheet #<input type="text" class="ic-cow-sheet-num" spellcheck="false"></label>' +
+        '<button type="button" class="ic-cow-sheet-up" disabled>Upload &amp; publish</button>' +
+      '</div>' +
+      '<div class="ic-cow-sheet-prog" hidden></div>';
+    sheetEl.appendChild(wrap);
+
+    const fileInput = wrap.querySelector("input[type=file]");
+    const fname = wrap.querySelector(".ic-cow-sheet-fname");
+    const numInput = wrap.querySelector(".ic-cow-sheet-num");
+    const upBtn = wrap.querySelector(".ic-cow-sheet-up");
+    const prog = wrap.querySelector(".ic-cow-sheet-prog");
+    numInput.value = entry.sheet && entry.sheet.number ? entry.sheet.number : deriveSheetNumber(entry.coName || (current.co && current.co.name));
+
+    const refreshUp = () => { upBtn.disabled = !(fileInput.files && fileInput.files[0] && numInput.value.trim()); };
+    fileInput.addEventListener("change", () => { fname.textContent = (fileInput.files && fileInput.files[0]) ? fileInput.files[0].name : "Choose a sheet (PDF/JPG/TIFF)…"; refreshUp(); });
+    numInput.addEventListener("input", refreshUp);
+
+    upBtn.addEventListener("click", async () => {
+      const file = fileInput.files && fileInput.files[0];
+      const number = numInput.value.trim();
+      if (!file || !number) return;
+      const pid = entry.projectId || projectId();
+      if (!pid) { alert("Couldn't determine the project — reopen the wizard from the Change Orders grid."); return; }
+      upBtn.disabled = true; fileInput.disabled = true; numInput.disabled = true;
+      prog.hidden = false;
+      const onStep = (m) => { prog.innerHTML = '<span class="ic-cow-spin"></span>' + escapeHtml(m); };
+      try {
+        const sheet = await uploadAndPublish(pid, file, number, onStep);
+        entry.sheet = sheet; entry.updated = Date.now(); await saveCO(current.co.id, entry);
+        renderSheetPanel(); applySheetLock(); updateStatus();
+      } catch (e) {
+        const msg = String(e && e.message || e);
+        if (msg === "__cancelled__") { renderSheetPanel(); return; }
+        prog.innerHTML = '<span class="ic-cow-err-ic">⚠</span>' + escapeHtml("Couldn't finish: " + msg);
+        upBtn.disabled = false; fileInput.disabled = false; numInput.disabled = false;
+      }
+    });
+  }
+
+  function escapeHtml(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 
   function renderBody() {
     if (!current) return;
@@ -278,6 +465,7 @@
     current.statusEl.textContent =
       (committed ? committed + " locked · " : "") +
       (locs || prods ? locs + " new line item" + (locs === 1 ? "" : "s") + ", " + prods + " product" + (prods === 1 ? "" : "s") + " ready" : "nothing to commit yet");
+    applySheetLock();
   }
 
   function loadJobs() {
@@ -291,6 +479,8 @@
 
   function commitAll() {
     if (!current) return;
+    // A published/selected sheet is required before anything can be placed.
+    if (!sheetReady()) { alert("Attach a sheet first — upload and publish a sheet (or select an existing one) at the top of the wizard, then commit."); return; }
     // Validate the uncommitted items.
     const problems = [];
     current.entry.locations.forEach((loc, li) => {
@@ -316,7 +506,7 @@
       }));
     if (!locations.length) { alert("Nothing new to commit."); return; }
 
-    const job = { coId: current.co.id, coName: current.co.name, takeoffId: tid, projectId: current.entry.projectId || projectId(), status: "pending", created: Date.now(), locations };
+    const job = { coId: current.co.id, coName: current.co.name, takeoffId: tid, projectId: current.entry.projectId || projectId(), status: "pending", created: Date.now(), locations, sheet: current.entry.sheet || null };
     loadJobs().then((jobs) => {
       // Block only a commit that's genuinely still running. A "running" job older
       // than a few minutes is stale (e.g. the takeoff tab was closed mid-commit) —
@@ -352,7 +542,7 @@
           current._lastSig = sig;
           current.entry = e;
           if (!current.entry.locations || !current.entry.locations.length) current.entry.locations = [blankLocation()];
-          renderBody(); updateStatus();
+          renderSheetPanel(); renderBody(); updateStatus();
           if (e.pushed) commitNote("Committed to Innergy. Now click “Recalculate direct costs and labor” in the takeoff to update this CO's total.", "ok");
         }
       }
@@ -421,6 +611,33 @@
       .ic-cow-status{font-size:12px;color:#64748b}
       .ic-cow-commit{cursor:pointer;border:none;background:#7c3aed;color:#fff;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:700}
       .ic-cow-commit:hover{background:#6d28d9}
+      .ic-cow-commit:disabled,.ic-cow-addloc:disabled{opacity:.5;cursor:not-allowed}
+      /* Step 0 — sheet import */
+      .ic-cow-sheet{padding:0 20px}
+      .ic-cow-sheet:empty{display:none}
+      .ic-cow-sheet-form{margin:14px 0 2px;border:1px solid #ddd6fe;background:#faf9ff;border-radius:10px;padding:12px 13px}
+      .ic-cow-sheet-hd{font-size:12px;font-weight:700;color:#6d28d9;margin-bottom:9px}
+      .ic-cow-sheet-grid{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+      .ic-cow-sheet-file{display:inline-flex;align-items:center;gap:8px;cursor:pointer;border:1px dashed #a78bfa;background:#fff;border-radius:7px;padding:7px 11px;font-size:12px;color:#6d28d9;font-weight:600;flex:1;min-width:200px}
+      .ic-cow-sheet-file input{display:none}
+      .ic-cow-sheet-fname{color:#475569;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .ic-cow-sheet-numwrap{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:#64748b}
+      .ic-cow-sheet-num{width:110px;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:7px;padding:7px 9px;font:13px -apple-system,Segoe UI,Roboto,sans-serif;color:#1f2937}
+      .ic-cow-sheet-up{cursor:pointer;border:none;background:#7c3aed;color:#fff;border-radius:7px;padding:8px 14px;font-size:12px;font-weight:700}
+      .ic-cow-sheet-up:hover{background:#6d28d9}
+      .ic-cow-sheet-up:disabled{opacity:.5;cursor:not-allowed}
+      .ic-cow-sheet-prog{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:#5b21b6}
+      .ic-cow-sheet-ready{display:flex;align-items:center;gap:10px;margin:14px 0 2px;border:1px solid #bbf7d0;background:#f0fdf4;border-radius:10px;padding:10px 13px}
+      .ic-cow-sheet-ic{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#16a34a;color:#fff;font-weight:800;font-size:13px;flex:none}
+      .ic-cow-sheet-txt{display:flex;flex-direction:column;line-height:1.3;flex:1}
+      .ic-cow-sheet-txt b{font-size:13px;color:#166534}
+      .ic-cow-sheet-txt span{font-size:11px;color:#15803d}
+      .ic-cow-sheet-change{cursor:pointer;border:1px solid #cbd5e1;background:#fff;color:#334155;border-radius:7px;padding:5px 11px;font-size:12px;font-weight:600}
+      .ic-cow-sheet-change:hover{background:#f8fafc}
+      .ic-cow-err-ic{color:#b91c1c;font-weight:800}
+      .ic-cow-locked-form{opacity:.45;pointer-events:none;filter:grayscale(.3)}
+      .ic-cow-spin{width:13px;height:13px;border:2px solid #ddd6fe;border-top-color:#7c3aed;border-radius:50%;animation:iccowSpin .7s linear infinite;flex:none}
+      @keyframes iccowSpin{to{transform:rotate(360deg)}}
     `;
     (document.head || document.documentElement).appendChild(st);
   }
