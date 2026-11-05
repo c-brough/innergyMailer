@@ -180,15 +180,19 @@
   }
   const okResp = (r) => !!(r && r.ok && r.data && r.data.IsSuccess !== false && (r.data.OutcomeType == null || r.data.OutcomeType === 0));
 
+  function dbgLog(rec) { try { const l = JSON.parse(localStorage.getItem("__icSheetDbg") || "[]"); l.push(rec); localStorage.setItem("__icSheetDbg", JSON.stringify(l.slice(-20))); } catch (e) {} }
+  function respSummary(data) { if (!data || typeof data !== "object") return { nonObj: true }; return { IsSuccess: data.IsSuccess, OutcomeType: data.OutcomeType, msg: (data.Messages && data.Messages[0] && data.Messages[0].Message) || null, keys: Object.keys(data).slice(0, 12) }; }
   async function drawingsGet(path, query) {
     const qs = query ? ("?" + new URLSearchParams(query).toString()) : "";
     const r = await fetch(SHEET_HOST + path + qs, { method: "GET", credentials: "include" });
     let data = null; try { data = JSON.parse(await r.text()); } catch (e) { /* non-json */ }
+    dbgLog({ m: "GET", path, status: r.status, resp: respSummary(data) });
     return { ok: r.ok, status: r.status, data };
   }
   async function drawingsPost(path, body) {
     const r = await fetch(SHEET_HOST + path, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     let data = null; try { data = JSON.parse(await r.text()); } catch (e) { /* non-json */ }
+    dbgLog({ m: "POST", path, status: r.status, reqKeys: body ? Object.keys(body) : null, resp: respSummary(data) });
     return { ok: r.ok, status: r.status, data };
   }
   async function drawingsUpload(pid, file) {
@@ -210,6 +214,7 @@
 
   // Full pipeline. onStep(msg) reports progress. Returns the stored entry.sheet.
   async function uploadAndPublish(pid, file, number, onStep) {
+    try { localStorage.removeItem("__icSheetDbg"); } catch (e) {}
     onStep("Uploading " + file.name + "…");
     const up = await drawingsUpload(pid, file);
     const batchId = up.data && up.data.batchId;
