@@ -228,7 +228,7 @@
       if (files.some((f) => fstatus(f) === 3 || fstatus(f) === 4)) throw new Error("Innergy couldn't process this file (status " + fstatus(files[0]) + ").");
       if (files.length && files.every(fdone)) break;
       // Diagnostic: surface what the poll actually returns so a mismatch is visible.
-      const diag = !arr.length ? "queued" : (!files.length ? "batch, no files" : files.map((f) => "st=" + fstatus(f) + " " + (f.pagesProcessed != null ? f.pagesProcessed : "?") + "/" + (f.pagesTotal != null ? f.pagesTotal : "?")).join(", "));
+      const diag = (!st.ok ? ("HTTP " + st.status + " ") : "") + (!arr.length ? "queued" : (!files.length ? "batch, no files" : files.map((f) => "st=" + fstatus(f) + " " + (f.pagesProcessed != null ? f.pagesProcessed : "?") + "/" + (f.pagesTotal != null ? f.pagesTotal : "?")).join(", ")));
       onStep("Analyzing sheet… (" + (i + 1) + ") — " + diag);
       if (i === 149) throw new Error("timed out analyzing (last: " + diag + ").");
     }
