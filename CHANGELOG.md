@@ -3,6 +3,15 @@
 All notable changes to InnerCider, newest first. The Options page reads this
 file to show you what's new when an update is available.
 
+## [1.26.0] - 2026-11-16
+### Changed (meeting scheduler)
+- A page-turn meeting can now span **multiple projects**. Previously a multi-WO selection only
+  qualified when every work order shared the same parent project (1.23.0); a mixed selection was
+  silently rejected. Now the button appears for any multi-selection, and the modal **groups the
+  work orders under each project heading**, lists the project names in the subject, and prefixes
+  each line of the invite body with its project when the selection crosses projects.
+- Attendees are unchanged — they already come from your 365 contacts, independent of any project.
+
 ## [1.25.0] - 2026-11-05
 ### Added (Quick Change Order — sheet import, part 1)
 - The wizard now starts with a **sheet step**: the location/product form is **locked** until a
