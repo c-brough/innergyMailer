@@ -1,8 +1,9 @@
 /* InnerCider — MAIN-world Work-Order grid selection reader
  *
  * The meeting scheduler (content/features/meeting-scheduler.js, isolated world)
- * lets a PM schedule a page-turn meeting for the ONE work order they've checked
- * in a WO grid. The selected row's data + the work order's own URL live in the
+ * lets a PM schedule a page-turn meeting for the work order(s) they've checked
+ * in a WO grid — one, several in a project, or several across projects. The
+ * selected rows' data + each work order's own URL live in the
  * DevExtreme grid instance (page world) — unreachable from the isolated content
  * script — so this MAIN-world companion reads the selection and posts it over
  * window.postMessage (ic-wo-sel). Mirrors change-order-wizard-main.js.
@@ -86,10 +87,14 @@
         const it = items[0];
         return { url: it.url, label: it.label, id: it.id, number: it.number, name: it.name, project: it.project, projectId: it.projectId };
       }
-      // Multiple WOs: only qualify when every one shares the same parent project.
+      // Multiple WOs: tag whether they all share one parent project. A meeting may
+      // span projects, so a mixed selection still qualifies — we just omit the
+      // shared project label and let the UI group WOs by their own project.
       const pid = items[0].projectId;
-      if (!pid || !items.every((it) => it.projectId === pid)) return { multi: items.length, mixed: true };
-      return { multi: items.length, items, project: items[0].project, projectId: pid };
+      const same = pid && items.every((it) => it.projectId === pid);
+      return same
+        ? { multi: items.length, items, project: items[0].project, projectId: pid }
+        : { multi: items.length, items };
     }
     return null;
   }

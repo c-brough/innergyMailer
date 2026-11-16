@@ -52,8 +52,16 @@
   // "Page-turn: Project Name - Work Order Name (Work Order Number)", dropping any
   // part we don't have.
   function cleanProject(s) { return String(s || "").replace(/^P-\d+-\d+\s*-\s*/i, "").trim(); }
+  // Distinct, cleaned project names across a selection (in first-seen order).
+  function distinctProjects(items) {
+    const seen = [];
+    for (const it of items || []) { const p = cleanProject(it && it.project); if (p && !seen.includes(p)) seen.push(p); }
+    return seen;
+  }
   function buildSubjectMulti(items, projectName) {
-    const proj = cleanProject(projectName || (items[0] && items[0].project) || "");
+    // Prefer an explicit shared project; otherwise join the distinct projects the
+    // selected WOs belong to (a cross-project page turn).
+    const proj = cleanProject(projectName) || distinctProjects(items).join(", ");
     if (items.length === 1) {
       const s = items[0];
       const wo = s.name && s.number && s.name !== s.number ? `${s.name} (${s.number})` : (s.name || s.number || s.label || "Work Order");
@@ -161,13 +169,13 @@
 
   // Floating button on a WO grid when exactly one WO is checked.
   function fab() { return document.getElementById("ic-meet-fab"); }
-  // Count of valid selected WOs (1 single, N for a same-project multi), or 0 when
-  // nothing qualifies (none selected, or a mixed-project multi-selection).
+  // Count of valid selected WOs (1 single, N for a multi-selection — the WOs may
+  // span projects), or 0 when nothing qualifies (none selected).
   function selCount() {
     const s = selection;
-    if (!enabled || !s || s.mixed) return 0;
-    if (s.url) return 1;
+    if (!enabled || !s) return 0;
     if (s.items && s.items.length) return s.items.length;
+    if (s.url) return 1;
     return 0;
   }
   function applyFab() {
@@ -238,12 +246,14 @@
 
   async function openModal(ctxArg) {
     const sel = ctxArg && (ctxArg.url || ctxArg.items) ? ctxArg : selection;
-    if (!sel || sel.mixed || (!sel.url && !(sel.items && sel.items.length))) return;
+    if (!sel || (!sel.url && !(sel.items && sel.items.length))) return;
     ensureStyle();
     closeModal();
     const items = sel.items && sel.items.length ? sel.items : [sel];
     const multi = items.length > 1;
-    const project = sel.project || (items[0] && items[0].project) || "";
+    // Shared project label only; a cross-project multi has none, and the subject
+    // and context fall back to each WO's own project.
+    const project = sel.project || "";
     const woUrl = fullUrl(items[0].url);
     const overlay = document.createElement("div");
     overlay.id = "ic-meet-overlay";
@@ -291,15 +301,29 @@
     const E = M.el;
     // Context: one WO link, or a project-grouped list for multiple.
     E.ctx.innerHTML = "";
+    const woLink = (it) => {
+      const a = document.createElement("a");
+      a.href = fullUrl(it.url); a.target = "_blank"; a.rel = "noopener";
+      a.textContent = (it.name || it.label) + (it.number ? " (" + it.number + ")" : "");
+      a.style.cssText = "display:block;color:#1a56db;word-break:break-all";
+      return a;
+    };
     if (multi) {
+      const projs = distinctProjects(items);
+      const head = projs.length > 1
+        ? items.length + " work orders · " + projs.length + " projects"
+        : items.length + " work orders · " + (cleanProject(project) || projs[0] || "same project");
       E.ctx.appendChild(Object.assign(document.createElement("div"),
-        { textContent: items.length + " work orders · " + (cleanProject(project) || "same project"), style: "font-weight:600;margin-bottom:4px" }));
-      for (const it of items) {
-        const a = document.createElement("a");
-        a.href = fullUrl(it.url); a.target = "_blank"; a.rel = "noopener";
-        a.textContent = (it.name || it.label) + (it.number ? " (" + it.number + ")" : "");
-        a.style.cssText = "display:block;color:#1a56db;word-break:break-all";
-        E.ctx.appendChild(a);
+        { textContent: head, style: "font-weight:600;margin-bottom:4px" }));
+      if (projs.length > 1) {
+        // Cross-project: group the WOs under each project heading.
+        for (const pn of projs) {
+          E.ctx.appendChild(Object.assign(document.createElement("div"),
+            { textContent: pn, style: "font-weight:600;color:#475569;margin:6px 0 2px" }));
+          for (const it of items.filter((i) => cleanProject(i.project) === pn)) E.ctx.appendChild(woLink(it));
+        }
+      } else {
+        for (const it of items) E.ctx.appendChild(woLink(it));
       }
     } else {
       E.ctx.appendChild(Object.assign(document.createElement("span"), { textContent: "Work order: " }));
@@ -319,8 +343,13 @@
     }
     E.date.value = todayStr();
     E.time.value = nextHalfHour();
+    const crossProject = distinctProjects(items).length > 1;
     E.body.value = multi
-      ? "Page-turn review for the following work orders:\n\n" + items.map((it) => `• ${it.name || it.label}${it.number ? " (" + it.number + ")" : ""}: ${fullUrl(it.url)}`).join("\n") + "\n"
+      ? "Page-turn review for the following work orders:\n\n" + items.map((it) => {
+          const proj = crossProject ? cleanProject(it.project) : "";
+          const wo = `${it.name || it.label}${it.number ? " (" + it.number + ")" : ""}`;
+          return `• ${proj ? proj + " — " : ""}${wo}: ${fullUrl(it.url)}`;
+        }).join("\n") + "\n"
       : `Page-turn review for work order ${items[0].label || ""}.\n\nWork order: ${woUrl}\n`;
 
     q(".mx").addEventListener("click", closeModal);
